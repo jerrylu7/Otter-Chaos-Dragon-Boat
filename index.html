@@ -16,14 +16,13 @@
      ============================================================ -->
 <script>
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyBLKA68lRaaqjPtik8h3jwmgIYCtPKL40Y",
-  authDomain: "otter-chaos-dragon-boat.firebaseapp.com",
-  databaseURL: "https://otter-chaos-dragon-boat-default-rtdb.firebaseio.com",
-  projectId: "otter-chaos-dragon-boat",
-  storageBucket: "otter-chaos-dragon-boat.firebasestorage.app",
-  messagingSenderId: "219671607144",
-  appId: "1:219671607144:web:418e80a4610666b7c188dd",
-  measurementId: "G-92YNJ5QNL5"
+  apiKey:            "PASTE_YOUR_API_KEY_HERE",
+  authDomain:        "PASTE_YOUR_AUTH_DOMAIN_HERE",
+  databaseURL:       "PASTE_YOUR_DATABASE_URL_HERE",
+  projectId:         "PASTE_YOUR_PROJECT_ID_HERE",
+  storageBucket:     "PASTE_YOUR_STORAGE_BUCKET_HERE",
+  messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
+  appId:             "PASTE_YOUR_APP_ID_HERE"
 };
 const TEAM_NAME_DEFAULT = "Otter Chaos Dragon Boat";
 </script>
@@ -245,6 +244,44 @@ tbody tr:hover td { background: var(--surface-alt); }
 .empty-state { text-align: center; padding: 48px 24px; color: var(--text-3); }
 .empty-icon  { font-size: 40px; margin-bottom: 12px; }
 .empty-title { font-size: 16px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
+
+/* ── Dashboard ── */
+.dash-welcome { margin-bottom: 24px; }
+.dash-welcome .greeting { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; }
+.dash-welcome .sub { font-size: 14px; color: var(--text-3); margin-top: 4px; }
+.dash-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 24px; }
+.dash-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }
+.dash-stat-val { font-size: 26px; font-weight: 800; letter-spacing: -1px; }
+.dash-stat-label { font-size: 11px; color: var(--text-3); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+.dash-section-title { font-size: 13px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.07em; margin: 0 0 10px; }
+.event-rsvp-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px 18px; margin-bottom: 10px; box-shadow: var(--shadow);
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.event-rsvp-card.rsvp-yes { border-left: 4px solid var(--success); }
+.event-rsvp-card.rsvp-no  { border-left: 4px solid var(--danger); }
+.event-rsvp-card.rsvp-pending { border-left: 4px solid var(--border-strong); }
+.event-rsvp-icon { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.event-rsvp-info { flex: 1; min-width: 160px; }
+.event-rsvp-name { font-size: 15px; font-weight: 700; margin-bottom: 3px; }
+.event-rsvp-meta { font-size: 13px; color: var(--text-2); display: flex; gap: 12px; flex-wrap: wrap; }
+.rsvp-action-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.rsvp-action-btn {
+  padding: 8px 14px; border-radius: var(--radius); border: 1.5px solid var(--border-strong);
+  background: var(--surface-alt); cursor: pointer; font-size: 13px; font-weight: 700;
+  font-family: inherit; transition: all 0.12s; color: var(--text-2); display: flex; align-items: center; gap: 5px;
+}
+.rsvp-action-btn:hover { background: var(--surface); }
+.rsvp-action-btn.selected-yes { background: var(--success-bg); color: var(--success-text); border-color: var(--success); }
+.rsvp-action-btn.selected-no  { background: var(--danger-bg);  color: var(--danger-text);  border-color: var(--danger); }
+.rsvp-status-pill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+.rsvp-status-pill.yes    { background: var(--success-bg); color: var(--success-text); }
+.rsvp-status-pill.no     { background: var(--danger-bg);  color: var(--danger-text); }
+.rsvp-status-pill.pending{ background: var(--surface-alt); color: var(--text-3); border: 1px solid var(--border); }
+.dash-my-seat { background: var(--accent-bg); border: 1px solid var(--accent); border-radius: var(--radius); padding: 8px 12px; font-size: 13px; color: var(--accent-text); display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; }
+.past-events-table { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+.dash-empty { text-align: center; padding: 32px 16px; color: var(--text-3); font-size: 14px; }
 
 .toast { position: fixed; bottom: 24px; right: 24px; background: #1a1916; color: #f5f4f0; padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; box-shadow: var(--shadow-md); z-index: 999; animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; }
 @keyframes toastIn { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -544,13 +581,14 @@ function bootApp() {
     const url = s.val()||'';
     applyLogo(url);
   });
-  navigate('roster');
+  navigate('dashboard');
 }
 
 function buildSidebar() {
   const nav = document.getElementById('sb-nav');
   nav.innerHTML = '';
   const pages = [
+    { id:'dashboard',  icon:'🏠', label:'My dashboard' },
     { id:'roster',     icon:'👥', label:'Roster' },
     { id:'lineup',     icon:'🚣', label:'Boat lineup' },
     { id:'events',     icon:'📅', label:'Events' },
@@ -564,7 +602,10 @@ function buildSidebar() {
     if (p.editOnly  && !can.edit())  return;
     const btn = document.createElement('button');
     btn.className='nav-item'; btn.id='nav-'+p.id;
-    btn.innerHTML = `<span class="nav-icon">${p.icon}</span>${p.label}${p.id==='approvals'?` <span class="nav-badge" id="approve-badge" style="display:none">!</span>`:''}`;
+    let extraBadge = '';
+    if (p.id==='approvals') extraBadge = ` <span class="nav-badge" id="approve-badge" style="display:none">!</span>`;
+    if (p.id==='dashboard') extraBadge = ` <span class="nav-badge" id="dash-badge" style="display:none"></span>`;
+    btn.innerHTML = `<span class="nav-icon">${p.icon}</span>${p.label}${extraBadge}`;
     btn.onclick = () => navigate(p.id);
     nav.appendChild(btn);
   });
@@ -576,6 +617,14 @@ function buildSidebar() {
       badge.textContent=n; badge.style.display=n?'inline-flex':'none';
     });
   }
+  // Dashboard badge: count upcoming events where current user hasn't responded
+  db.ref('events').on('value', snap => {
+    const badge = document.getElementById('dash-badge');
+    if (!badge) return;
+    const evs = Object.values(snap.val()||{});
+    const pending = evs.filter(e => e.date >= today() && !(e.rsvps||{})[currentUser.uid]).length;
+    badge.textContent = pending; badge.style.display = pending ? 'inline-flex' : 'none';
+  });
 }
 
 function renderSidebarUser() {
@@ -590,13 +639,14 @@ function renderSidebarUser() {
 }
 
 const PAGE_META = {
-  roster:     { title:'Roster',       sub:'All team members' },
-  lineup:     { title:'Boat lineup',  sub:'Seat assignments for events' },
-  events:     { title:'Events',       sub:'Practices and races' },
-  attendance: { title:'Attendance',   sub:'Track who shows up' },
-  reminders:  { title:'Reminders',    sub:'Email members who haven\'t responded' },
-  approvals:  { title:'Approvals',    sub:'Manage member access and roles' },
-  settings:   { title:'Settings',     sub:'Team configuration' },
+  dashboard:  { title:'My dashboard',  sub:'Your upcoming events and RSVP status' },
+  roster:     { title:'Roster',        sub:'All team members' },
+  lineup:     { title:'Boat lineup',   sub:'Seat assignments for events' },
+  events:     { title:'Events',        sub:'Practices and races' },
+  attendance: { title:'Attendance',    sub:'Track who shows up' },
+  reminders:  { title:'Reminders',     sub:'Email members who haven\'t responded' },
+  approvals:  { title:'Approvals',     sub:'Manage member access and roles' },
+  settings:   { title:'Settings',      sub:'Team configuration' },
 };
 
 function navigate(page) {
@@ -609,8 +659,197 @@ function navigate(page) {
   document.getElementById('pg-actions').innerHTML = '';
   document.getElementById('pg-content').innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading…</div>';
   closeSidebar();
-  ({ roster:pgRoster, lineup:pgLineup, events:pgEvents, attendance:pgAttendance, reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
+  ({ dashboard:pgDashboard, roster:pgRoster, lineup:pgLineup, events:pgEvents, attendance:pgAttendance, reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgDashboard() {
+  const C = document.getElementById('pg-content');
+  const uid = currentUser.uid;
+  const p   = currentProfile;
+
+  // Load events + lineups in parallel
+  Promise.all([
+    db.ref('events').orderByChild('date').get(),
+    db.ref('lineups').get(),
+  ]).then(([evSnap, lineupSnap]) => {
+    const allEvents = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
+    const lineups   = lineupSnap.val()||{};
+    const now = today();
+
+    const upcoming = allEvents.filter(e => e.date >= now);
+    const past     = allEvents.filter(e => e.date <  now);
+
+    // Stats
+    const totalPast    = past.length;
+    const attendedPast = past.filter(e => (e.rsvps||{})[uid]==='yes').length;
+    const pendingCount = upcoming.filter(e => !(e.rsvps||{})[uid]).length;
+    const attPct       = totalPast ? Math.round(attendedPast/totalPast*100) : null;
+
+    // Greeting
+    const hour = new Date().getHours();
+    const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+
+    // Find my seat for each upcoming event
+    function mySeat(evId) {
+      const ev_lineup = lineups[evId]||{};
+      for (const [k,v] of Object.entries(ev_lineup)) {
+        if (v === uid) return k.replace('_',' ');
+      }
+      return null;
+    }
+
+    // Build HTML
+    let html = `
+      <div class="dash-welcome">
+        <div class="greeting">${greet}, ${esc(p.first || p.name.split(' ')[0])} 👋</div>
+        <div class="sub">${pendingCount > 0 ? `You have <strong>${pendingCount}</strong> upcoming event${pendingCount!==1?'s':''} awaiting your RSVP.` : 'You\'re all caught up — no pending RSVPs!'}</div>
+      </div>
+
+      <div class="dash-stats">
+        <div class="dash-stat">
+          <div class="dash-stat-val" style="color:var(--accent)">${upcoming.length}</div>
+          <div class="dash-stat-label">Upcoming</div>
+        </div>
+        <div class="dash-stat">
+          <div class="dash-stat-val" style="color:${pendingCount>0?'var(--warning)':'var(--success)'}">${pendingCount}</div>
+          <div class="dash-stat-label">Need reply</div>
+        </div>
+        <div class="dash-stat">
+          <div class="dash-stat-val" style="color:var(--success)">${attendedPast}</div>
+          <div class="dash-stat-label">Attended</div>
+        </div>
+        <div class="dash-stat">
+          <div class="dash-stat-val" style="color:${attPct===null?'var(--text-3)':attPct>=80?'var(--success)':attPct>=50?'var(--warning)':'var(--danger)'}">${attPct!==null?attPct+'%':'—'}</div>
+          <div class="dash-stat-label">Att. rate</div>
+        </div>
+      </div>`;
+
+    // ── Upcoming events ──
+    html += `<div class="dash-section-title">Upcoming events</div>`;
+
+    if (!upcoming.length) {
+      html += `<div class="card" style="padding:0"><div class="dash-empty">No upcoming events scheduled yet.</div></div>`;
+    } else {
+      html += upcoming.map(ev => {
+        const rsvp = (ev.rsvps||{})[uid] || '';
+        const seat = mySeat(ev.id);
+        const statusClass = rsvp==='yes' ? 'rsvp-yes' : rsvp==='no' ? 'rsvp-no' : 'rsvp-pending';
+        const isRace = ev.type === 'Race';
+
+        const statusPill = rsvp==='yes'
+          ? `<span class="rsvp-status-pill yes">✓ Going</span>`
+          : rsvp==='no'
+          ? `<span class="rsvp-status-pill no">✗ Not going</span>`
+          : `<span class="rsvp-status-pill pending">⏳ No reply</span>`;
+
+        const seatInfo = seat
+          ? `<div class="dash-my-seat">🚣 Your seat: <strong>${esc(seat)}</strong></div>`
+          : '';
+
+        const daysUntil = Math.round((new Date(ev.date+'T12:00:00') - new Date()) / 86400000);
+        const daysLabel = daysUntil===0 ? '🔴 Today!' : daysUntil===1 ? '🟡 Tomorrow' : `${daysUntil}d away`;
+
+        return `<div class="event-rsvp-card ${statusClass}" id="ecard-${ev.id}">
+          <div class="event-rsvp-icon" style="background:${isRace?'var(--race-bg)':'var(--accent-bg)'}">${isRace?'🏁':'🚣'}</div>
+          <div class="event-rsvp-info">
+            <div class="event-rsvp-name">${esc(ev.name)} <span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></div>
+            <div class="event-rsvp-meta">
+              <span>📅 ${fmtDate(ev.date)}</span>
+              ${ev.time?`<span>🕐 ${fmtTime(ev.time)}</span>`:''}
+              ${ev.location?`<span>📍 ${esc(ev.location)}</span>`:''}
+              <span style="font-weight:700;color:${daysUntil<=1?'var(--danger)':daysUntil<=7?'var(--warning)':'var(--text-3)'}">${daysLabel}</span>
+            </div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              ${statusPill}
+              ${seatInfo}
+            </div>
+          </div>
+          <div class="rsvp-action-btns">
+            <button class="rsvp-action-btn ${rsvp==='yes'?'selected-yes':''}" onclick="dashRsvp('${ev.id}','yes',this)" title="Going">✓ Going</button>
+            <button class="rsvp-action-btn ${rsvp==='no'?'selected-no':''}" onclick="dashRsvp('${ev.id}','no',this)" title="Not going">✗ No</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Past events ──
+    if (past.length) {
+      const recentPast = [...past].reverse().slice(0, 8);
+      html += `<div class="dash-section-title" style="margin-top:28px">Recent history</div>
+        <div class="past-events-table">
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <thead><tr>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Event</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Date</th>
+              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Status</th>
+              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">My seat</th>
+            </tr></thead>
+            <tbody>
+              ${recentPast.map(ev => {
+                const rsvp = (ev.rsvps||{})[uid];
+                const seat = mySeat(ev.id);
+                const pill = rsvp==='yes'
+                  ? `<span class="rsvp-status-pill yes">✓ Went</span>`
+                  : rsvp==='no'
+                  ? `<span class="rsvp-status-pill no">✗ Absent</span>`
+                  : `<span class="rsvp-status-pill pending">— No reply</span>`;
+                return `<tr style="border-bottom:1px solid var(--border)">
+                  <td style="padding:11px 16px">
+                    <div style="font-weight:600">${esc(ev.name)}</div>
+                    <span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px;margin-top:2px">${ev.type}</span>
+                  </td>
+                  <td style="padding:11px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td>
+                  <td style="padding:11px 16px;text-align:center">${pill}</td>
+                  <td style="padding:11px 16px;text-align:center;font-size:13px;color:var(--text-2)">${seat?'🚣 '+esc(seat):'—'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    C.innerHTML = html;
+  });
+}
+
+// RSVP directly from dashboard card
+window.dashRsvp = async function(evId, val, btn) {
+  const uid = currentUser.uid;
+
+  // Optimistic UI — update buttons immediately
+  const card = btn.closest('.event-rsvp-card');
+  card.querySelectorAll('.rsvp-action-btn').forEach(b => b.classList.remove('selected-yes','selected-no'));
+  if (val==='yes') btn.classList.add('selected-yes');
+  if (val==='no')  btn.classList.add('selected-no');
+
+  // Update status pill
+  const pill = card.querySelector('.rsvp-status-pill');
+  if (pill) {
+    pill.className = `rsvp-status-pill ${val==='yes'?'yes':val==='no'?'no':'pending'}`;
+    pill.textContent = val==='yes'?'✓ Going':val==='no'?'✗ Not going':'⏳ No reply';
+  }
+
+  // Update card border class
+  card.classList.remove('rsvp-yes','rsvp-no','rsvp-pending');
+  card.classList.add(val==='yes'?'rsvp-yes':val==='no'?'rsvp-no':'rsvp-pending');
+
+  // Persist to Firebase
+  await db.ref('events/'+evId+'/rsvps/'+uid).set(val);
+
+  // Update dashboard badge count
+  const badge = document.getElementById('dash-badge');
+  if (badge) {
+    const snap = await db.ref('events').orderByChild('date').get();
+    const evs = Object.values(snap.val()||{});
+    const pending = evs.filter(e => e.date >= today() && !(e.rsvps||{})[uid]).length;
+    badge.textContent = pending; badge.style.display = pending ? 'inline-flex' : 'none';
+  }
+
+  showToast(val==='yes' ? 'Marked as going ✓' : 'Marked as not going');
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ROSTER
