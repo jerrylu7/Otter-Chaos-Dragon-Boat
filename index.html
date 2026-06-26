@@ -1190,13 +1190,18 @@ function renderEvDetailLineup(evId, ev, members, lineup) {
   function seatEl(key, label) {
     const name = seatName(key);
     const isMe = lineup[key] === uid;
-    const mObj = members.find(m=>m.uid===lineup[key]);
-    const style = isMe ? 'background:var(--accent-bg);border-color:var(--accent)' : '';
+    const memberUid = lineup[key];
+    const isGoing = memberUid && goingUids.has(memberUid);
+    const warnStyle = memberUid && !isGoing ? 'border-color:var(--warning);background:var(--warning-bg)' : '';
+    const style = isMe ? 'background:var(--accent-bg);border-color:var(--accent)' : warnStyle;
     const click = ed ? `onclick="evdPickSeat('${evId}','${key}')"` : '';
     return `<div class="seat-slot${name?' filled':''}${ed?' editable':''}" ${click} style="${style};min-height:40px">
       ${name
-        ? `<div class="avatar" style="width:22px;height:22px;font-size:9px">${initials(name)}</div>
-           <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}${isMe?' (you)':''}</div>
+        ? `<div class="avatar" style="width:22px;height:22px;font-size:9px;${memberUid&&!isGoing?'background:var(--warning-bg);color:var(--warning-text)':''}">${initials(name)}</div>
+           <div style="flex:1;min-width:0">
+             <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}${isMe?' (you)':''}</div>
+             ${memberUid&&!isGoing?'<div style="font-size:10px;color:var(--warning-text);font-weight:600">⚠ not confirmed</div>':''}
+           </div>
            ${ed?`<button class="rm-seat" onclick="event.stopPropagation();evdClrSeat('${evId}','${key}')">✕</button>`:''}`
         : `<span class="seat-empty" style="font-size:11px">${ed?'+ assign':''}</span>`}
     </div>`;
@@ -1275,11 +1280,15 @@ window.evdPickSeat = function(evId, key) {
   if(!can.edit()) return;
   db.ref('users').get().then(uSnap=>{
     db.ref('lineups/'+evId).get().then(lSnap=>{
-      const members=Object.values(uSnap.val()||{}).filter(u=>u.approved);
-      const lineup=lSnap.val()||{};
-      const seated=new Set(Object.entries(lineup).filter(([k,v])=>k!==key&&v).map(([,v])=>v));
-      const avail=members.filter(m=>!seated.has(m.uid));
-      const sideHint=key.includes('left')?' — prefer Left':key.includes('right')?' — prefer Right':'';
+      const allMembers = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+      const ev = modalEl?._ev;
+      const goingUids = new Set(Object.entries((ev?.rsvps)||{}).filter(([,v])=>v==='yes').map(([k])=>k));
+      const lineup = lSnap.val()||{};
+      const seated = new Set(Object.entries(lineup).filter(([k,v])=>k!==key&&v).map(([,v])=>v));
+      // Only members who said Going and aren't already seated elsewhere
+      const avail = allMembers.filter(m => goingUids.has(m.uid) && !seated.has(m.uid));
+      const notGoing = allMembers.filter(m => !goingUids.has(m.uid) && !seated.has(m.uid));
+      const sideHint = key.includes('left')?' — prefer Left':key.includes('right')?' — prefer Right':'';
       // Save parent modal state
       const parentModal=modalEl;
       closeModal();
@@ -1288,19 +1297,25 @@ window.evdPickSeat = function(evId, key) {
       overlay.innerHTML=`<div class="modal">
         <div class="modal-header"><div><div class="modal-title">Assign seat</div><div class="modal-sub">${esc(key.replace(/_/g,' '))}${sideHint}</div></div><button class="btn btn-sm btn-ghost" onclick="closeModal();modalEl=null;openEventDetail('${evId}',null)">✕</button></div>
         <div class="modal-body" style="padding:12px 24px">
+          <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
+            Confirmed going — ${avail.length} available
+          </div>
           <input type="text" id="seat-q2" placeholder="Search member…" style="margin-bottom:12px" oninput="filterSeats(this.value)">
           <div id="seat-list">
-            ${avail.length?avail.map(m=>{
+            ${avail.length ? avail.map(m=>{
               const sides=Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
               const match=sides.some(s=>key.includes(s.toLowerCase()));
               return `<div class="rsvp-row" style="cursor:pointer" onclick="evdAssignSeat('${evId}','${key}','${m.uid}')">
                 <div class="avatar">${initials(m.name)}</div>
                 <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc(sides.join('/'))||'—'} side · ${m.weight?m.weight+' lbs':'?'}</div></div>
-                ${match?'<span class="badge badge-yes">✓ match</span>':''}
+                ${match?'<span class="badge badge-yes">✓ side match</span>':''}
               </div>`;
-            }).join(''):'<p style="color:var(--text-3);font-size:13px;padding:8px 0">All members assigned.</p>'}
+            }).join('') : '<p style="color:var(--text-3);font-size:13px;padding:8px 0">No available members — all confirmed attendees are already seated.</p>'}
           </div>
-          ${lineup[key]?`<hr><button class="btn btn-danger btn-sm" onclick="evdClrSeat('${evId}','${key}')">Remove current</button>`:''}
+          ${notGoing.length ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-3)">
+            ${notGoing.length} member${notGoing.length!==1?'s':''} excluded (no RSVP or declined)
+          </div>` : ''}
+          ${lineup[key]?`<hr><button class="btn btn-danger btn-sm" onclick="evdClrSeat('${evId}','${key}')">Remove current assignment</button>`:''}
         </div>
       </div>`;
       document.body.appendChild(overlay); modalEl=overlay;
