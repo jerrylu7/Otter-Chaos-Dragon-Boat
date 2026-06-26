@@ -163,19 +163,36 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* Collapse toggle button */
 .sb-toggle {
   flex-shrink: 0;
-  width: 26px; height: 26px;
+  width: 28px; height: 28px;
   border-radius: 50%;
-  border: 1px solid var(--border-strong);
+  border: 1.5px solid var(--border-strong);
   background: var(--surface);
   cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  font-size: 13px; color: var(--text-3);
-  transition: transform 0.22s, opacity 0.15s, background 0.1s;
+  font-size: 14px; color: var(--text-2);
+  transition: transform 0.22s, background 0.1s, color 0.1s, box-shadow 0.1s;
   flex-shrink: 0;
+  box-shadow: var(--shadow);
 }
-.sb-toggle:hover { background: var(--surface-alt); color: var(--text); }
+.sb-toggle:hover { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent); }
 .sidebar.collapsed .sb-toggle { transform: rotate(180deg); }
-/* In collapsed mode, toggle sits inside logo zone still */
+
+/* When collapsed, float the toggle button on the right edge of the sidebar so it's always reachable */
+.sidebar.collapsed .sidebar-logo {
+  justify-content: center;
+  padding: 16px 0;
+  position: relative;
+}
+.sidebar.collapsed .sb-toggle {
+  position: fixed;
+  left: 52px;
+  top: 20px;
+  z-index: 55;
+  background: var(--surface);
+  border: 1.5px solid var(--border-strong);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  width: 28px; height: 28px;
+}
 
 /* Nav */
 .sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; overflow-x: hidden; }
@@ -849,10 +866,12 @@ function renderSidebarUser() {
 let sidebarCollapsed = false;
 function toggleSidebar() {
   sidebarCollapsed = !sidebarCollapsed;
-  const sb   = document.getElementById('sidebar');
-  const main = document.getElementById('main-content');
+  const sb     = document.getElementById('sidebar');
+  const main   = document.getElementById('main-content');
+  const toggle = document.getElementById('sb-toggle');
   sb.classList.toggle('collapsed', sidebarCollapsed);
   if (main) main.style.marginLeft = sidebarCollapsed ? '64px' : '224px';
+  if (toggle) toggle.title = sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
   localStorage.setItem('sb_collapsed', sidebarCollapsed ? '1' : '0');
 }
 function restoreSidebarState() {
@@ -861,6 +880,8 @@ function restoreSidebarState() {
     document.getElementById('sidebar').classList.add('collapsed');
     const main = document.getElementById('main-content');
     if (main) main.style.marginLeft = '64px';
+    const toggle = document.getElementById('sb-toggle');
+    if (toggle) toggle.title = 'Expand sidebar';
   }
 }
 
