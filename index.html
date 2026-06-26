@@ -27,7 +27,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-92YNJ5QNL5"
 };
 const TEAM_NAME_DEFAULT = "Otter Chaos Dragon Boat";
-const APP_URL = "https://otterchaos.ca"; // ← update to your actual hosted URL
+const APP_URL = "https://otterchaos.ca";
 
 // EmailJS — free auto-email service. Sign up at emailjs.com, create a service
 // and template, then paste your IDs here to enable automatic reminders.
@@ -472,7 +472,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
       <div id="auth-logo-img" style="margin-bottom:10px;display:none"><img id="auth-logo-el" src="" alt="Team logo" style="max-height:80px;max-width:200px;object-fit:contain;border-radius:8px"></div>
       <span class="dragon" id="auth-logo-emoji">🐉</span>
       <div class="app-name" id="auth-team-name">Otter Chaos Dragon Boat</div>
-      <div class="app-sub">otterchaosdragonboat.com</div>
+      <div class="app-sub">otterchaos.ca</div>
     </div>
 
     <div class="auth-tabs">
@@ -805,12 +805,12 @@ function buildSidebar() {
     { id:'dashboard', icon:'🏠', label:'Dashboard',  badge:'dash-badge' },
     { id:'races',     icon:'🏁', label:'Races' },
     { id:'practices', icon:'🚣', label:'Practices' },
+    { id:'roster',    icon:'👥', label:'Roster' },
     { id:'profile',   icon:'👤', label:'My profile' },
   ];
 
   // ── Admin/Coach pages (hidden from paddlers) ──
   const adminPages = [
-    { id:'roster',     icon:'👥', label:'Roster' },
     { id:'lineup',     icon:'📋', label:'Lineup' },
     { id:'attendance', icon:'✅', label:'Attendance' },
     { id:'reminders',  icon:'✉️',  label:'Reminders' },
@@ -971,21 +971,21 @@ function pgDashboard() {
       </div>
 
       <div class="dash-stats">
-        <div class="dash-stat" onclick="navigate('practices')" style="cursor:pointer" title="View all practices">
+        <div class="dash-stat">
           <div class="dash-stat-val" style="color:var(--accent)">${allUpcoming.length}</div>
-          <div class="dash-stat-label">Upcoming ↗</div>
+          <div class="dash-stat-label">Upcoming</div>
         </div>
-        <div class="dash-stat" onclick="navigate(pendingCount>0?'practices':'dashboard')" style="cursor:pointer" title="Events needing your RSVP">
+        <div class="dash-stat" onclick="navigatePendingRsvp()" style="cursor:pointer" title="Events needing your RSVP">
           <div class="dash-stat-val" style="color:${pendingCount>0?'var(--warning)':'var(--success)'}">${pendingCount}</div>
           <div class="dash-stat-label">Need reply${pendingCount>0?' ↗':''}</div>
         </div>
-        <div class="dash-stat" onclick="navigate('profile')" style="cursor:pointer" title="View your attendance history">
+        <div class="dash-stat">
           <div class="dash-stat-val" style="color:var(--success)">${attendedPast}</div>
-          <div class="dash-stat-label">Attended ↗</div>
+          <div class="dash-stat-label">Attended</div>
         </div>
-        <div class="dash-stat" onclick="navigate('profile')" style="cursor:pointer" title="View your stats">
+        <div class="dash-stat">
           <div class="dash-stat-val" style="color:${attPct===null?'var(--text-3)':attPct>=80?'var(--success)':attPct>=50?'var(--warning)':'var(--danger)'}">${attPct!==null?attPct+'%':'—'}</div>
-          <div class="dash-stat-label">Att. rate ↗</div>
+          <div class="dash-stat-label">Att. rate</div>
         </div>
       </div>`;
 
@@ -1342,6 +1342,65 @@ function sendRSVP(memberId, eventId, response) {
       rsvp:      response
     })
   }).catch(e => console.warn("Apps Script RSVP sync failed:", e));
+}
+
+// Navigate to a filtered view of events that need the user's RSVP
+function navigatePendingRsvp() {
+  const uid = currentUser.uid;
+  // Set active nav to practices (closest fit) then render a filtered view
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  document.getElementById('nav-practices')?.classList.add('active');
+  document.getElementById('pg-title').textContent = 'Needs your reply';
+  document.getElementById('pg-sub').textContent   = 'Upcoming events you haven\'t responded to yet';
+  document.getElementById('pg-actions').innerHTML = '';
+  const C = document.getElementById('pg-content');
+  C.innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading…</div>';
+  closeSidebar();
+
+  Promise.all([
+    db.ref('events').orderByChild('date').get(),
+    db.ref('lineups').get(),
+  ]).then(([evSnap, lSnap]) => {
+    const lineups = lSnap.val()||{};
+    const now = today();
+    const pending = Object.values(evSnap.val()||{})
+      .filter(e => e.date >= now && !(e.rsvps||{})[uid])
+      .sort((a,b) => a.date.localeCompare(b.date));
+
+    if (!pending.length) {
+      C.innerHTML = `<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up!</div><div class="empty-sub">You've replied to every upcoming event.</div></div></div>`;
+      return;
+    }
+
+    C.innerHTML = `<div style="font-size:13px;color:var(--text-3);margin-bottom:14px">${pending.length} event${pending.length!==1?'s':''} waiting for your reply</div>` +
+      pending.map(ev => {
+        const isRace = ev.type === 'Race';
+        const daysUntil = Math.round((new Date(ev.date+'T12:00:00') - new Date()) / 86400000);
+        const daysLabel = daysUntil===0 ? '🔴 Today!' : daysUntil===1 ? '🟡 Tomorrow' : `${daysUntil}d away`;
+        const seat = (()=>{
+          const lup = lineups[ev.id]||{};
+          const k = Object.entries(lup).find(([,v])=>v===uid)?.[0];
+          return k ? k.replace(/_/g,' ') : null;
+        })();
+        return `<div class="event-rsvp-card rsvp-pending clickable" id="ecard-${ev.id}" onclick="openEventDetail('${ev.id}',event)">
+          <div class="event-rsvp-icon" style="background:${isRace?'var(--race-bg)':'var(--accent-bg)'}">${isRace?'🏁':'🚣'}</div>
+          <div class="event-rsvp-info">
+            <div class="event-rsvp-name">${esc(ev.name)} <span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></div>
+            <div class="event-rsvp-meta">
+              <span>📅 ${fmtDate(ev.date)}</span>
+              ${ev.time?`<span>🕐 ${fmtTime(ev.time)}</span>`:''}
+              ${ev.location?`<span>📍 ${esc(ev.location)}</span>`:''}
+              <span style="font-weight:700;color:${daysUntil<=1?'var(--danger)':daysUntil<=7?'var(--warning)':'var(--text-3)'}">${daysLabel}</span>
+            </div>
+            ${seat?`<div class="dash-my-seat" style="margin-top:6px">🚣 Your seat: <strong>${esc(seat)}</strong></div>`:''}
+          </div>
+          <div class="rsvp-action-btns" onclick="event.stopPropagation()">
+            <button class="rsvp-action-btn" onclick="dashRsvp('${ev.id}','yes',this)">✓ Going</button>
+            <button class="rsvp-action-btn" onclick="dashRsvp('${ev.id}','no',this)">✗ No</button>
+          </div>
+        </div>`;
+      }).join('');
+  });
 }
 
 // RSVP directly from dashboard card
