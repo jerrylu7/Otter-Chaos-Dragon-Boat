@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dragon Boat Team</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+<!-- ============================================================
+     🔧 PASTE YOUR FIREBASE CONFIG HERE (one-time setup)
+     Replace every value below with your actual Firebase config.
+     Get it from: Firebase Console → Project Settings → Your Apps → </> (Web)
+     ============================================================ -->
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBLKA68lRaaqjPtik8h3jwmgIYCtPKL40Y",
+  authDomain: "otter-chaos-dragon-boat.firebaseapp.com",
+  databaseURL: "https://otter-chaos-dragon-boat-default-rtdb.firebaseio.com",
+  projectId: "otter-chaos-dragon-boat",
+  storageBucket: "otter-chaos-dragon-boat.firebasestorage.app",
+  messagingSenderId: "219671607144",
+  appId: "1:219671607144:web:418e80a4610666b7c188dd",
+  measurementId: "G-92YNJ5QNL5"
+};
+const TEAM_NAME_DEFAULT = "Dragon Boat Team"; // shown on login screen before team name is set
+</script>
+<!-- ============================================================ -->
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f4f3ef;
+  --surface: #ffffff;
+  --surface-alt: #f9f8f5;
+  --border: #e4e2d8;
+  --border-strong: #ccc9bb;
+  --text: #1a1916;
+  --text-2: #56534a;
+  --text-3: #999690;
+  --accent: #1b55a8;
+  --accent-bg: #e6eef9;
+  --accent-text: #153f80;
+  --success: #1a7a3c;
+  --success-bg: #e6f5ec;
+  --success-text: #115228;
+  --danger: #c0392b;
+  --danger-bg: #fde8e6;
+  --danger-text: #9b2215;
+  --warning: #b45309;
+  --warning-bg: #fef0d0;
+  --warning-text: #8a3e06;
+  --race: #7c3aed;
+  --race-bg: #f3ecff;
+  --race-text: #5b21b6;
+  --radius: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.1), 0 2px 6px rgba(0,0,0,0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17171a; --surface: #222226; --surface-alt: #1c1c20;
+    --border: #303038; --border-strong: #44444e;
+    --text: #f0efe9; --text-2: #a09e98; --text-3: #606058;
+    --accent: #4a8de8; --accent-bg: #182840; --accent-text: #82b4f5;
+    --success: #34a85a; --success-bg: #0e2418; --success-text: #5dd880;
+    --danger: #e05545; --danger-bg: #2a100d; --danger-text: #f08878;
+    --warning: #e8a020; --warning-bg: #261c08; --warning-text: #f0c060;
+    --race: #c084fc; --race-bg: #26154a; --race-text: #d8a8ff;
+  }
+}
+
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 15px; line-height: 1.5; }
+
+/* ── Config banner (shown when unconfigured) ── */
+#config-banner {
+  background: #1a1916; color: #f5f4f0;
+  padding: 14px 24px; font-size: 14px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+#config-banner code { background: rgba(255,255,255,0.15); padding: 2px 8px; border-radius: 4px; font-family: monospace; font-size: 13px; }
+
+/* ── Auth ── */
+#auth-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+
+.auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-md); padding: 36px 40px; width: min(440px, 100%); }
+.auth-logo { text-align: center; margin-bottom: 24px; }
+.auth-logo .dragon { font-size: 48px; display: block; margin-bottom: 8px; }
+.auth-logo .app-name { font-size: 24px; font-weight: 800; letter-spacing: -0.5px; }
+.auth-logo .app-sub { font-size: 14px; color: var(--text-3); margin-top: 3px; }
+
+.auth-tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+.auth-tab { flex: 1; padding: 10px; text-align: center; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-3); border: none; background: none; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: inherit; transition: all 0.15s; }
+.auth-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.form-group { margin-bottom: 14px; }
+.form-label { font-size: 12px; font-weight: 700; color: var(--text-2); margin-bottom: 5px; display: block; text-transform: uppercase; letter-spacing: 0.05em; }
+input, select, textarea { width: 100%; padding: 10px 13px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: 14px; background: var(--surface); color: var(--text); font-family: inherit; transition: border-color 0.15s; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 18px; border-radius: var(--radius); border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.1s; font-family: inherit; line-height: 1; white-space: nowrap; text-decoration: none; }
+.btn:hover { background: var(--surface-alt); }
+.btn:active { transform: scale(0.98); }
+.btn-full { width: 100%; }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { opacity: 0.9; background: var(--accent); }
+.btn-danger { color: var(--danger-text); border-color: var(--border); }
+.btn-danger:hover { background: var(--danger-bg); border-color: var(--danger-text); }
+.btn-sm { padding: 6px 12px; font-size: 13px; }
+.btn-ghost { border-color: transparent; background: transparent; }
+.btn-ghost:hover { background: var(--surface-alt); border-color: var(--border); }
+
+.msg { border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 14px; display: none; }
+.msg-error { background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-text); }
+.msg-warn  { background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning); }
+.msg-info  { background: var(--accent-bg); color: var(--accent-text); border: 1px solid var(--accent); }
+.msg-ok    { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success); }
+
+/* ── App shell ── */
+#app { display: none; min-height: 100vh; }
+.app-shell { display: flex; min-height: 100vh; }
+
+.sidebar { width: 224px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; }
+.sidebar-logo { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
+.sidebar-logo .dragon { font-size: 28px; }
+.sidebar-logo .team-name { font-size: 15px; font-weight: 700; margin-top: 4px; }
+.sidebar-logo .team-sub { font-size: 12px; color: var(--text-3); }
+.sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius); cursor: pointer; color: var(--text-2); font-size: 14px; font-weight: 600; transition: all 0.1s; margin-bottom: 2px; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+.nav-item:hover { background: var(--surface-alt); color: var(--text); }
+.nav-item.active { background: var(--accent-bg); color: var(--accent-text); }
+.nav-icon { font-size: 17px; width: 22px; text-align: center; flex-shrink: 0; }
+.nav-badge { margin-left: auto; background: var(--danger-bg); color: var(--danger-text); font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
+.sidebar-user { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+.user-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--accent-bg); color: var(--accent-text); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.user-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
+.role-badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.role-admin   { background: var(--danger-bg);   color: var(--danger-text); }
+.role-coach   { background: var(--warning-bg);  color: var(--warning-text); }
+.role-paddler { background: var(--success-bg);  color: var(--success-text); }
+
+.main { margin-left: 224px; flex: 1; min-height: 100vh; }
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 40; }
+.page-title { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; }
+.page-sub { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+.topbar-actions { display: flex; gap: 8px; align-items: center; }
+.content { padding: 28px 32px; }
+
+/* ── Shared components ── */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); }
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.metric { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; box-shadow: var(--shadow); }
+.metric-label { font-size: 11px; color: var(--text-3); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.metric-value { font-size: 28px; font-weight: 800; letter-spacing: -1px; }
+
+.table-wrap { border-radius: 12px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { padding: 11px 16px; text-align: left; font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); background: var(--surface-alt); white-space: nowrap; }
+td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--surface-alt); }
+
+.badge { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
+.badge-practice { background: var(--accent-bg); color: var(--accent-text); }
+.badge-race     { background: var(--race-bg);   color: var(--race-text); }
+.badge-yes      { background: var(--success-bg); color: var(--success-text); }
+.badge-no       { background: var(--danger-bg);  color: var(--danger-text); }
+
+.avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-bg); color: var(--accent-text); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.member-cell { display: flex; align-items: center; gap: 10px; }
+.member-cell .mname { font-weight: 700; font-size: 14px; }
+.member-cell .msub  { font-size: 12px; color: var(--text-3); }
+.pct-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; padding: 3px 8px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+.att-bar  { width: 64px; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; display: inline-block; vertical-align: middle; }
+.att-fill { height: 100%; border-radius: 3px; }
+
+.section-label { font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; margin: 24px 0 10px; }
+
+/* ── Event cards ── */
+.event-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; margin-bottom: 10px; box-shadow: var(--shadow); display: flex; align-items: flex-start; gap: 14px; }
+.event-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.event-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+.event-meta { font-size: 13px; color: var(--text-2); display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 8px; }
+.event-tally { display: flex; gap: 12px; font-size: 13px; font-weight: 600; }
+
+/* ── Modal ── */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 16px; }
+.modal { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-md); width: min(560px, 100%); max-height: 92vh; overflow-y: auto; border: 1px solid var(--border); }
+.modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.modal-title  { font-size: 17px; font-weight: 700; }
+.modal-sub    { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+.modal-body   { padding: 20px 24px; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+.form-grid-2  { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-grid-3  { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+/* ── RSVP ── */
+.rsvp-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.rsvp-row:last-child { border-bottom: none; }
+.rsvp-info { flex: 1; }
+.rsvp-name { font-size: 14px; font-weight: 700; }
+.rsvp-sub  { font-size: 12px; color: var(--text-3); }
+.rsvp-btns { display: flex; gap: 5px; }
+.rsvp-btn { padding: 5px 11px; font-size: 12px; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface-alt); cursor: pointer; font-family: inherit; font-weight: 600; transition: all 0.1s; color: var(--text-2); }
+.rsvp-btn.going    { background: var(--success-bg); color: var(--success-text); border-color: var(--success); }
+.rsvp-btn.notgoing { background: var(--danger-bg);  color: var(--danger-text);  border-color: var(--danger); }
+
+/* ── Lineup ── */
+.boat-visual { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px; }
+.boat-section-title { font-size: 14px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+.seat-grid { display: grid; grid-template-columns: 1fr 36px 1fr; gap: 7px 4px; align-items: center; }
+.seat-col-label { text-align: center; font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 0; }
+.seat-row-num { text-align: center; font-size: 11px; color: var(--text-3); font-weight: 700; background: var(--surface-alt); border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; margin: 0 auto; }
+.seat-slot { border: 1.5px dashed var(--border-strong); border-radius: var(--radius); padding: 7px 10px; min-height: 44px; display: flex; align-items: center; gap: 8px; transition: all 0.15s; font-size: 13px; background: var(--surface-alt); position: relative; }
+.seat-slot.editable { cursor: pointer; }
+.seat-slot.editable:hover { border-color: var(--accent); background: var(--accent-bg); }
+.seat-slot.filled { border-style: solid; border-color: var(--border); background: var(--surface); }
+.seat-slot.filled.editable:hover { border-color: var(--accent); }
+.seat-slot .seat-name  { font-weight: 700; font-size: 13px; }
+.seat-slot .seat-sub   { font-size: 10px; color: var(--text-3); }
+.seat-slot .seat-empty { color: var(--text-3); font-size: 12px; font-style: italic; }
+.seat-slot .rm-seat    { position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--danger-bg); color: var(--danger-text); font-size: 9px; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; font-weight: 700; opacity: 0; transition: opacity 0.1s; }
+.seat-slot:hover .rm-seat { opacity: 1; }
+.special-seat { border: 1.5px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: flex; align-items: center; gap: 10px; transition: all 0.15s; background: var(--surface-alt); }
+.special-seat.editable { cursor: pointer; }
+.special-seat.editable:hover { border-color: var(--accent); background: var(--accent-bg); }
+.special-seat.filled { background: var(--surface); border-color: var(--border); }
+.special-seat.filled.editable:hover { border-color: var(--accent); }
+
+/* ── Reminders ── */
+.reminder-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; box-shadow: var(--shadow); overflow: hidden; }
+.reminder-header { padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface-alt); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.reminder-tabs { display: flex; gap: 6px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+.rtab { padding: 6px 14px; border-radius: var(--radius); border: 1px solid var(--border); background: transparent; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-2); font-family: inherit; transition: all 0.1s; }
+.rtab.active { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent); }
+.reminder-body { padding: 16px 20px; }
+.recipient-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; background: var(--surface-alt); border: 1px solid var(--border); font-size: 12px; color: var(--text-2); margin: 2px; }
+.email-preview { background: var(--surface-alt); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; color: var(--text-2); font-family: Georgia, serif; margin-bottom: 12px; max-height: 260px; overflow-y: auto; }
+
+.readonly-notice { background: var(--accent-bg); color: var(--accent-text); border: 1px solid var(--accent); border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; }
+.empty-state { text-align: center; padding: 48px 24px; color: var(--text-3); }
+.empty-icon  { font-size: 40px; margin-bottom: 12px; }
+.empty-title { font-size: 16px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
+
+.toast { position: fixed; bottom: 24px; right: 24px; background: #1a1916; color: #f5f4f0; padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; box-shadow: var(--shadow-md); z-index: 999; animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; }
+@keyframes toastIn { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+.spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-full { min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--text-3); font-size: 14px; }
+
+.mobile-topbar { display: none; background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 16px; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 60; }
+.hamburger { background: none; border: none; cursor: pointer; font-size: 22px; color: var(--text); padding: 4px; }
+.mob-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 45; }
+.mob-overlay.open { display: block; }
+.sidebar.mob-open { transform: translateX(0) !important; }
+
+hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+.row-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+
+@media (max-width: 768px) {
+  .sidebar { transform: translateX(-100%); transition: transform 0.25s ease; }
+  .main { margin-left: 0; }
+  .mobile-topbar { display: flex; }
+  .topbar { display: none; }
+  .content { padding: 16px; }
+  .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .event-card { flex-wrap: wrap; }
+  .auth-card { padding: 24px 20px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Config not set banner -->
+<div id="config-banner" style="display:none">
+  ⚠️ Firebase not configured. Open this file in a text editor and fill in your <code>FIREBASE_CONFIG</code> values near the top, then host the file.
+  <a href="https://console.firebase.google.com" target="_blank" style="color:#82b4f5;margin-left:4px">Open Firebase Console ↗</a>
+</div>
+
+<!-- Auth -->
+<div id="auth-screen" style="display:none">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span class="dragon">🐉</span>
+      <div class="app-name" id="auth-team-name">Dragon Boat Team</div>
+      <div class="app-sub">Sign in to your team</div>
+    </div>
+
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('login')">Sign in</button>
+      <button class="auth-tab" onclick="switchTab('register')">Join team</button>
+    </div>
+
+    <div id="auth-msg" class="msg"></div>
+
+    <!-- Login -->
+    <div id="login-form">
+      <div class="form-group"><label class="form-label">Email</label><input id="l-email" type="email" placeholder="your@email.com" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <div class="form-group"><label class="form-label">Password</label><input id="l-pass" type="password" placeholder="Your password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <button class="btn btn-primary btn-full" onclick="doLogin()">Sign in</button>
+    </div>
+
+    <!-- Register -->
+    <div id="register-form" style="display:none">
+      <div class="msg msg-info" style="display:block;margin-bottom:14px">After registering, an admin must approve your account before you can sign in.</div>
+      <div class="form-grid-2" style="margin-bottom:14px">
+        <div class="form-group" style="margin:0"><label class="form-label">First name</label><input id="r-first" placeholder="Alex"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Last name</label><input id="r-last" placeholder="Chen"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Email</label><input id="r-email" type="email" placeholder="your@email.com"></div>
+      <div class="form-group"><label class="form-label">Password</label><input id="r-pass" type="password" placeholder="Min 6 characters"></div>
+      <div class="form-group"><label class="form-label">I am a…</label>
+        <select id="r-role">
+          <option value="paddler">Paddler</option>
+          <option value="coach">Coach</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="doRegister()">Request to join</button>
+    </div>
+  </div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <div class="mob-overlay" id="mobOverlay" onclick="closeSidebar()"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <div class="dragon">🐉</div>
+        <div class="team-name" id="sb-team-name">Dragon Boat Team</div>
+        <div class="team-sub">Team Tracker</div>
+      </div>
+      <nav class="sidebar-nav" id="sb-nav"></nav>
+      <div class="sidebar-user" id="sb-user"></div>
+    </aside>
+    <div class="main">
+      <div class="mobile-topbar">
+        <button class="hamburger" onclick="openSidebar()">☰</button>
+        <span style="font-weight:800;font-size:16px">🐉 Dragon Boat</span>
+      </div>
+      <div class="topbar" id="topbar">
+        <div>
+          <div class="page-title" id="pg-title"></div>
+          <div class="page-sub"   id="pg-sub"></div>
+        </div>
+        <div class="topbar-actions" id="pg-actions"></div>
+      </div>
+      <div class="content" id="pg-content"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── Globals ──────────────────────────────────────────────────────────────────
+let db, auth, currentUser, currentProfile, currentPage = 'roster', modalEl = null, toastTimer = null;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const can = { edit: () => ['admin','coach'].includes(currentProfile?.role), admin: () => currentProfile?.role === 'admin' };
+const esc   = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const uid   = p  => (p||'id')+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+const today = () => new Date().toISOString().slice(0,10);
+const initials = n => String(n||'').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+const fmtDate  = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric',year:'numeric'}) : '';
+const fmtDateS = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'}) : '';
+const fmtTime  = t => { if(!t) return ''; const [h,m]=t.split(':').map(Number); return `${h%12||12}:${String(m).padStart(2,'0')} ${h>=12?'pm':'am'}`; };
+const pctColor = p => p===null?'var(--text-3)':p>=80?'var(--success)':p>=50?'var(--warning)':'var(--danger)';
+const pctBg    = p => p===null?'var(--border)':p>=80?'var(--success-bg)':p>=50?'var(--warning-bg)':'var(--danger-bg)';
+
+function roleBadge(r) {
+  const cls = {admin:'role-admin',coach:'role-coach',paddler:'role-paddler'}[r]||'role-paddler';
+  return `<span class="role-badge ${cls}">${r||'paddler'}</span>`;
+}
+
+function showToast(msg, icon) {
+  document.querySelector('.toast')?.remove(); clearTimeout(toastTimer);
+  const el = document.createElement('div'); el.className='toast';
+  el.innerHTML = `<span>${icon||'✓'}</span> ${msg}`;
+  document.body.appendChild(el);
+  toastTimer = setTimeout(()=>el.remove(), 2800);
+}
+
+function closeModal() { modalEl?.remove(); modalEl=null; }
+
+function showMsg(msg, type='error') {
+  const el = document.getElementById('auth-msg');
+  el.className = `msg msg-${type}`; el.textContent = msg; el.style.display='block';
+}
+
+function friendlyErr(e) {
+  return ({
+    'auth/invalid-email':'Invalid email address.',
+    'auth/user-not-found':'No account found with that email.',
+    'auth/wrong-password':'Wrong password.',
+    'auth/invalid-credential':'Wrong email or password.',
+    'auth/email-already-in-use':'That email is already registered.',
+    'auth/weak-password':'Password must be at least 6 characters.',
+    'auth/too-many-requests':'Too many attempts. Try again later.',
+  })[e.code] || e.message;
+}
+
+// ─── Config check & Firebase init ────────────────────────────────────────────
+function isConfigured() {
+  return FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.startsWith('PASTE_');
+}
+
+function initApp() {
+  if (!isConfigured()) {
+    document.getElementById('config-banner').style.display = 'flex';
+    return;
+  }
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db   = firebase.database();
+  auth = firebase.auth();
+  startAuth();
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+function startAuth() {
+  auth.onAuthStateChanged(async user => {
+    if (!user) { showAuth(); return; }
+    currentUser = user;
+    const snap = await db.ref('users/'+user.uid).get();
+    if (!snap.exists() || !snap.val().approved) { showPending(); return; }
+    currentProfile = snap.val();
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    bootApp();
+  });
+}
+
+function showAuth() {
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  // Populate team name on login screen
+  db.ref('settings/teamName').get().then(s => {
+    if (s.val()) document.getElementById('auth-team-name').textContent = s.val();
+  });
+}
+
+function showPending() {
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('register-form').style.display = 'none';
+  showMsg('⏳ Your account is pending admin approval. Check back soon.','warn');
+  const signOutLink = document.createElement('p');
+  signOutLink.style.cssText = 'text-align:center;margin-top:14px;font-size:13px';
+  signOutLink.innerHTML = '<a href="#" onclick="auth.signOut()" style="color:var(--accent)">Sign out</a>';
+  document.querySelector('#auth-screen .auth-card').appendChild(signOutLink);
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((el,i)=>el.classList.toggle('active',(i===0)===(tab==='login')));
+  document.getElementById('login-form').style.display    = tab==='login'    ? '' : 'none';
+  document.getElementById('register-form').style.display = tab==='register' ? '' : 'none';
+  document.getElementById('auth-msg').style.display = 'none';
+}
+
+async function doLogin() {
+  const email = document.getElementById('l-email').value.trim();
+  const pass  = document.getElementById('l-pass').value;
+  if (!email||!pass) { showMsg('Please enter your email and password.'); return; }
+  try { await auth.signInWithEmailAndPassword(email, pass); }
+  catch(e) { showMsg(friendlyErr(e)); }
+}
+
+async function doRegister() {
+  const first = document.getElementById('r-first').value.trim();
+  const last  = document.getElementById('r-last').value.trim();
+  const email = document.getElementById('r-email').value.trim();
+  const pass  = document.getElementById('r-pass').value;
+  const role  = document.getElementById('r-role').value;
+  if (!first||!last||!email||!pass) { showMsg('Please fill in all fields.'); return; }
+  if (pass.length<6) { showMsg('Password must be at least 6 characters.'); return; }
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, pass);
+    const allSnap = await db.ref('users').get();
+    const isFirst = !allSnap.exists() || !Object.keys(allSnap.val()||{}).length;
+    await db.ref('users/'+cred.user.uid).set({
+      uid: cred.user.uid, email, first, last, name: first+' '+last,
+      role: isFirst ? 'admin' : role,
+      approved: isFirst,
+      joinedAt: Date.now(),
+      side:'', weight:'', emergency:'', paddlerRole:'Paddler'
+    });
+    if (!isFirst) {
+      await auth.signOut();
+      document.getElementById('login-form').style.display = '';
+      document.getElementById('register-form').style.display = 'none';
+      document.querySelectorAll('.auth-tab').forEach((el,i)=>el.classList.toggle('active',i===0));
+      showMsg('✓ Registration submitted! Sign in once an admin approves you.','ok');
+    }
+  } catch(e) { showMsg(friendlyErr(e)); }
+}
+
+// ─── Boot ────────────────────────────────────────────────────────────────────
+function bootApp() {
+  buildSidebar();
+  renderSidebarUser();
+  db.ref('settings/teamName').on('value', s => {
+    const n = s.val()||TEAM_NAME_DEFAULT;
+    document.getElementById('sb-team-name').textContent = n;
+  });
+  navigate('roster');
+}
+
+function buildSidebar() {
+  const nav = document.getElementById('sb-nav');
+  nav.innerHTML = '';
+  const pages = [
+    { id:'roster',     icon:'👥', label:'Roster' },
+    { id:'lineup',     icon:'🚣', label:'Boat lineup' },
+    { id:'events',     icon:'📅', label:'Events' },
+    { id:'attendance', icon:'✅', label:'Attendance' },
+    { id:'reminders',  icon:'✉️',  label:'Reminders',  editOnly:true },
+    { id:'approvals',  icon:'🔐', label:'Approvals',   adminOnly:true },
+    { id:'settings',   icon:'⚙️',  label:'Settings',   adminOnly:true },
+  ];
+  pages.forEach(p => {
+    if (p.adminOnly && !can.admin()) return;
+    if (p.editOnly  && !can.edit())  return;
+    const btn = document.createElement('button');
+    btn.className='nav-item'; btn.id='nav-'+p.id;
+    btn.innerHTML = `<span class="nav-icon">${p.icon}</span>${p.label}${p.id==='approvals'?` <span class="nav-badge" id="approve-badge" style="display:none">!</span>`:''}`;
+    btn.onclick = () => navigate(p.id);
+    nav.appendChild(btn);
+  });
+  if (can.admin()) {
+    db.ref('users').on('value', snap => {
+      const badge = document.getElementById('approve-badge');
+      if (!badge) return;
+      const n = Object.values(snap.val()||{}).filter(u=>!u.approved).length;
+      badge.textContent=n; badge.style.display=n?'inline-flex':'none';
+    });
+  }
+}
+
+function renderSidebarUser() {
+  const p = currentProfile;
+  document.getElementById('sb-user').innerHTML = `
+    <div class="user-avatar">${initials(p.name)}</div>
+    <div style="flex:1;min-width:0">
+      <div class="user-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</div>
+      <div>${roleBadge(p.role)}</div>
+    </div>
+    <button class="btn btn-sm btn-ghost" onclick="auth.signOut()" title="Sign out" style="padding:6px;flex-shrink:0">↩</button>`;
+}
+
+const PAGE_META = {
+  roster:     { title:'Roster',       sub:'All team members' },
+  lineup:     { title:'Boat lineup',  sub:'Seat assignments for events' },
+  events:     { title:'Events',       sub:'Practices and races' },
+  attendance: { title:'Attendance',   sub:'Track who shows up' },
+  reminders:  { title:'Reminders',    sub:'Email members who haven\'t responded' },
+  approvals:  { title:'Approvals',    sub:'Manage member access and roles' },
+  settings:   { title:'Settings',     sub:'Team configuration' },
+};
+
+function navigate(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  document.getElementById('nav-'+page)?.classList.add('active');
+  const m = PAGE_META[page]||{};
+  document.getElementById('pg-title').textContent = m.title||'';
+  document.getElementById('pg-sub').textContent   = m.sub||'';
+  document.getElementById('pg-actions').innerHTML = '';
+  document.getElementById('pg-content').innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading…</div>';
+  closeSidebar();
+  ({ roster:pgRoster, lineup:pgLineup, events:pgEvents, attendance:pgAttendance, reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ROSTER
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgRoster() {
+  const C = document.getElementById('pg-content');
+  const A = document.getElementById('pg-actions');
+  if (can.admin()) {
+    const b=document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Add member'; b.onclick=()=>openMemberModal(null); A.appendChild(b);
+  }
+  db.ref('users').on('value', snap => {
+    const members = Object.values(snap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+    const lc = members.filter(m=>m.side==='Left').length;
+    const rc = members.filter(m=>m.side==='Right').length;
+    const avgW = members.length ? Math.round(members.reduce((a,m)=>a+Number(m.weight||0),0)/members.length) : 0;
+    C.innerHTML = `
+      <div class="metric-grid">
+        <div class="metric"><div class="metric-label">Members</div><div class="metric-value">${members.length}</div></div>
+        <div class="metric"><div class="metric-label">Left side</div><div class="metric-value">${lc}</div></div>
+        <div class="metric"><div class="metric-label">Right side</div><div class="metric-value">${rc}</div></div>
+        <div class="metric"><div class="metric-label">Avg weight</div><div class="metric-value">${avgW}<span style="font-size:16px;font-weight:400"> kg</span></div></div>
+      </div>
+      ${!can.admin()?'<div class="readonly-notice">👁 View only — contact an admin to update your info.</div>':''}
+      <div class="table-wrap"><table>
+        <thead><tr><th>Member</th><th>App role</th><th>Side</th><th>Position</th><th>Weight</th><th>Emergency contact</th>${can.admin()?'<th></th>':''}</tr></thead>
+        <tbody>${members.map(m=>`<tr>
+          <td><div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc(m.email)}</div></div></div></td>
+          <td>${roleBadge(m.role)}</td>
+          <td><span class="badge" style="background:${m.side==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${m.side==='Left'?'var(--accent-text)':'var(--success-text)'}">${esc(m.side)||'—'}</span></td>
+          <td>${esc(m.paddlerRole||'Paddler')}</td>
+          <td>${m.weight?esc(m.weight)+' kg':'—'}</td>
+          <td style="font-size:13px;color:var(--text-2)">${esc(m.emergency||'—')}</td>
+          ${can.admin()?`<td><div style="display:flex;gap:5px">
+            <button class="btn btn-sm btn-ghost" onclick='openMemberModal(${JSON.stringify(JSON.stringify(m))})'>Edit</button>
+            <button class="btn btn-sm btn-danger btn-ghost" onclick="unapprove('${m.uid}')">Remove</button>
+          </div></td>`:''}
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+  });
+}
+
+window.unapprove = async uid => {
+  if (!can.admin()) return;
+  if (!confirm('Remove this member?')) return;
+  await db.ref('users/'+uid+'/approved').set(false);
+  showToast('Member removed','🗑');
+};
+
+function openMemberModal(mJson) {
+  if (!can.admin()) return; closeModal();
+  const m = mJson ? JSON.parse(typeof mJson==='string'?mJson:JSON.stringify(mJson)) : null;
+  const isNew = !m;
+  const overlay = document.createElement('div'); overlay.className='overlay';
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+  overlay.innerHTML=`<div class="modal">
+    <div class="modal-header"><div class="modal-title">${isNew?'Add member':'Edit member'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      ${isNew?`<div class="form-grid-2" style="margin-bottom:14px">
+        <div class="form-group" style="margin:0"><label class="form-label">First name *</label><input id="mf-first" placeholder="Taylor"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Last name *</label><input id="mf-last" placeholder="Park"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Email *</label><input id="mf-email" type="email" placeholder="taylor@email.com"></div>
+      <div class="form-group"><label class="form-label">Temp password *</label><input id="mf-pass" type="password" placeholder="Min 6 characters"></div>`
+      :`<div class="form-group"><label class="form-label">Name</label><input id="mf-name" value="${esc(m.name)}"></div>`}
+      <div class="form-grid-3" style="margin-bottom:14px">
+        <div class="form-group" style="margin:0"><label class="form-label">App role</label><select id="mf-role">
+          <option value="paddler" ${m?.role==='paddler'?'selected':''}>Paddler</option>
+          <option value="coach"   ${m?.role==='coach'?'selected':''}>Coach</option>
+          <option value="admin"   ${m?.role==='admin'?'selected':''}>Admin</option>
+        </select></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Paddle side</label><select id="mf-side">
+          <option value=""      ${!m?.side?'selected':''}>—</option>
+          <option value="Left"  ${m?.side==='Left'?'selected':''}>Left</option>
+          <option value="Right" ${m?.side==='Right'?'selected':''}>Right</option>
+          <option value="N/A"   ${m?.side==='N/A'?'selected':''}>N/A</option>
+        </select></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Position</label><select id="mf-pos">
+          <option ${m?.paddlerRole==='Paddler'?'selected':''}>Paddler</option>
+          <option ${m?.paddlerRole==='Drummer'?'selected':''}>Drummer</option>
+          <option ${m?.paddlerRole==='Steers'?'selected':''}>Steers</option>
+        </select></div>
+      </div>
+      <div class="form-grid-2" style="margin-bottom:0">
+        <div class="form-group" style="margin:0"><label class="form-label">Weight (kg)</label><input id="mf-weight" type="number" value="${esc(m?.weight||'')}" placeholder="70"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Emergency contact</label><input id="mf-emerg" value="${esc(m?.emergency||'')}" placeholder="Name · Phone"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveMember('${m?.uid||''}',${isNew})">Save member</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay); modalEl=overlay;
+}
+
+window.saveMember = async (uidArg, isNew) => {
+  if (!can.admin()) return;
+  const updates = {
+    role:        document.getElementById('mf-role').value,
+    side:        document.getElementById('mf-side').value,
+    paddlerRole: document.getElementById('mf-pos').value,
+    weight:      document.getElementById('mf-weight').value,
+    emergency:   document.getElementById('mf-emerg').value.trim(),
+  };
+  if (isNew) {
+    const first=document.getElementById('mf-first').value.trim(),
+          last =document.getElementById('mf-last').value.trim(),
+          email=document.getElementById('mf-email').value.trim(),
+          pass =document.getElementById('mf-pass').value;
+    if(!first||!last||!email||!pass){alert('Fill all required fields.');return;}
+    // Note: creating users from client SDK signs out the current user.
+    // Direct-add via admin SDK requires a backend. Recommend using Firebase Console
+    // or the "Join team" flow. Showing a helpful message instead.
+    alert('Tip: To add members, ask them to use the "Join team" tab on the login screen. You can then approve them in the Approvals section and set their role there.\n\nDirect account creation from the app requires a backend server.');
+    closeModal(); return;
+  }
+  const nameEl = document.getElementById('mf-name');
+  if (nameEl) updates.name = nameEl.value.trim();
+  await db.ref('users/'+uidArg).update(updates);
+  if (uidArg===currentUser.uid) { const s=await db.ref('users/'+uidArg).get(); currentProfile=s.val(); renderSidebarUser(); }
+  closeModal(); showToast('Member updated','✓');
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LINEUP
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgLineup() {
+  const C = document.getElementById('pg-content');
+  db.ref('events').orderByChild('date').on('value', snap => {
+    const evs = Object.values(snap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
+    const upcoming = evs.filter(e=>e.date>=today());
+    const all = [...upcoming, ...evs.filter(e=>e.date<today())];
+    C.innerHTML = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+      <label style="font-size:14px;font-weight:700;color:var(--text-2)">Event:</label>
+      <select id="lineup-sel" onchange="loadLineup(this.value)" style="max-width:280px">
+        <option value="">— Choose an event —</option>
+        ${all.map(e=>`<option value="${e.id}">${e.name} (${fmtDateS(e.date)})</option>`).join('')}
+      </select>
+    </div><div id="lineup-body"></div>`;
+    const first = upcoming[0]?.id || all[0]?.id;
+    if (first) { document.getElementById('lineup-sel').value=first; loadLineup(first); }
+  });
+}
+
+window.loadLineup = evId => {
+  if (!evId) { document.getElementById('lineup-body').innerHTML=''; return; }
+  db.ref('users').get().then(uSnap => {
+    db.ref('lineups/'+evId).on('value', lSnap => {
+      drawBoat(evId, lSnap.val()||{}, Object.values(uSnap.val()||{}).filter(u=>u.approved));
+    });
+  });
+};
+
+function drawBoat(evId, lineup, members) {
+  const body = document.getElementById('lineup-body');
+  if (!body) return;
+  const ed = can.edit();
+
+  function slot(key, mem) {
+    const cls = `seat-slot${mem?' filled':''}${ed?' editable':''}`;
+    const click = ed ? `onclick="pickSeat('${evId}','${key}')"` : '';
+    const rm = ed && mem ? `<button class="rm-seat" onclick="event.stopPropagation();clrSeat('${evId}','${key}')">✕</button>` : '';
+    return `<div class="${cls}" ${click}>${mem
+      ? `<div class="avatar" style="width:26px;height:26px;font-size:10px">${initials(mem.name)}</div><div><div class="seat-name">${esc(mem.name)}</div><div class="seat-sub">${esc(mem.side||'')}</div></div>${rm}`
+      : `<span class="seat-empty">${ed?'+ assign':''}</span>`}</div>`;
+  }
+
+  function specialSlot(key, mem, label) {
+    const cls = `special-seat${mem?' filled':''}${ed?' editable':''}`;
+    const click = ed ? `onclick="pickSeat('${evId}','${key}')"` : '';
+    return `<div class="${cls}" ${click} style="max-width:300px">
+      ${mem
+        ? `<div class="avatar">${initials(mem.name)}</div><div style="flex:1"><div style="font-weight:700;font-size:14px">${esc(mem.name)}</div><div style="font-size:12px;color:var(--text-3)">${esc(mem.paddlerRole||'')} · ${esc(mem.side||'')}</div></div>
+           ${ed?`<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();clrSeat('${evId}','${key}')">✕</button>`:''}`
+        : `<span style="color:var(--text-3);font-size:13px;font-style:italic">${ed?`+ assign ${label}`:label+' not assigned'}</span>`}
+    </div>`;
+  }
+
+  const seated = new Set(Object.values(lineup).filter(Boolean));
+  const unassigned = members.filter(m=>!seated.has(m.uid));
+
+  let rows = '';
+  for (let r=1; r<=10; r++) {
+    const lM = members.find(m=>m.uid===lineup[`row${r}_left`]);
+    const rM = members.find(m=>m.uid===lineup[`row${r}_right`]);
+    rows += slot(`row${r}_left`,lM);
+    rows += `<div class="seat-row-num">${r}</div>`;
+    rows += slot(`row${r}_right`,rM);
+  }
+
+  body.innerHTML = `
+    ${!ed?'<div class="readonly-notice">👁 View only — coaches and admins can edit the lineup.</div>':''}
+    <div class="boat-visual">
+      <div class="boat-section-title">🥁 Drummer — front of boat</div>
+      ${specialSlot('drummer', members.find(m=>m.uid===lineup.drummer), 'drummer')}
+      <hr style="margin:14px 0">
+      <div class="boat-section-title">🚣 Paddlers</div>
+      <div style="display:grid;grid-template-columns:1fr 36px 1fr;gap:0 4px;margin-bottom:6px">
+        <div class="seat-col-label">Left</div><div></div><div class="seat-col-label">Right</div>
+      </div>
+      <div class="seat-grid">${rows}</div>
+      <hr style="margin:14px 0">
+      <div class="boat-section-title">🎯 Steersperson — back of boat</div>
+      ${specialSlot('steers', members.find(m=>m.uid===lineup.steers), 'steersperson')}
+    </div>
+    ${ed ? `<div class="card" style="padding:16px 20px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:10px">Unassigned (${unassigned.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${unassigned.length
+          ? unassigned.map(m=>`<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius)"><div class="avatar" style="width:24px;height:24px;font-size:9px">${initials(m.name)}</div><div><div style="font-size:13px;font-weight:700">${esc(m.name)}</div><div style="font-size:11px;color:var(--text-3)">${esc(m.side||'—')}</div></div></div>`).join('')
+          : '<span style="color:var(--text-3);font-size:13px">All members assigned 🎉</span>'}
+      </div>
+    </div>` : ''}`;
+}
+
+window.clrSeat = async (evId, key) => { if(!can.edit())return; await db.ref('lineups/'+evId+'/'+key).remove(); showToast('Seat cleared'); };
+
+window.pickSeat = evId_key => {
+  // handle two args
+  const [evId, key] = arguments.length===2 ? [arguments[0],arguments[1]] : evId_key.split('||');
+};
+// redefine with two params
+window.pickSeat = function(evId, key) {
+  if (!can.edit()) return; closeModal();
+  db.ref('users').get().then(uSnap => {
+    db.ref('lineups/'+evId).get().then(lSnap => {
+      const members = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+      const lineup  = lSnap.val()||{};
+      const seated  = new Set(Object.entries(lineup).filter(([k,v])=>k!==key&&v).map(([,v])=>v));
+      const avail   = members.filter(m=>!seated.has(m.uid));
+      const sideHint = key.includes('left')?' — prefer Left':key.includes('right')?' — prefer Right':'';
+      const overlay = document.createElement('div'); overlay.className='overlay';
+      overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+      overlay.innerHTML=`<div class="modal">
+        <div class="modal-header"><div><div class="modal-title">Assign seat</div><div class="modal-sub">${esc(key.replace(/_/g,' '))}${sideHint}</div></div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+        <div class="modal-body" style="padding:12px 24px">
+          <input type="text" id="seat-q" placeholder="Search member…" style="margin-bottom:12px" oninput="filterSeats(this.value)">
+          <div id="seat-list">
+            ${avail.length ? avail.map(m=>`<div class="rsvp-row" style="cursor:pointer" onclick="assignSeat('${evId}','${key}','${m.uid}')">
+              <div class="avatar">${initials(m.name)}</div>
+              <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc(m.paddlerRole||'Paddler')} · ${esc(m.side||'—')} side · ${m.weight?m.weight+' kg':'?'}</div></div>
+              ${m.side&&key.includes(m.side.toLowerCase())?'<span class="badge badge-yes">✓ side match</span>':''}
+            </div>`).join('') : '<p style="color:var(--text-3);font-size:13px;padding:8px 0">All members assigned.</p>'}
+          </div>
+          ${lineup[key]?`<hr><button class="btn btn-danger btn-sm" onclick="clrSeat('${evId}','${key}');closeModal()">Remove current assignment</button>`:''}
+        </div>
+      </div>`;
+      document.body.appendChild(overlay); modalEl=overlay;
+      document.getElementById('seat-q')?.focus();
+    });
+  });
+};
+window.filterSeats = q => { document.querySelectorAll('#seat-list .rsvp-row').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q.toLowerCase())?'':'none'); };
+window.assignSeat  = async (evId,key,uid) => { if(!can.edit())return; await db.ref('lineups/'+evId+'/'+key).set(uid); closeModal(); showToast('Seat assigned','🚣'); };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgEvents() {
+  const C = document.getElementById('pg-content');
+  const A = document.getElementById('pg-actions');
+  if (can.edit()) {
+    const b=document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Add event'; b.onclick=()=>openEvtModal(null); A.appendChild(b);
+  }
+  db.ref('events').orderByChild('date').on('value', snap => {
+    const evs = Object.values(snap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
+    db.ref('users').get().then(uSnap => {
+      const mc = Object.values(uSnap.val()||{}).filter(u=>u.approved).length;
+      const upcoming = evs.filter(e=>e.date>=today());
+      const past     = evs.filter(e=>e.date<today()).reverse();
+      if (!evs.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">📅</div><div class="empty-title">No events yet</div></div></div>`; return; }
+      function cards(arr) {
+        return arr.map(ev=>{
+          const yes=Object.values(ev.rsvps||{}).filter(v=>v==='yes').length;
+          const no =Object.values(ev.rsvps||{}).filter(v=>v==='no').length;
+          const pend=mc-Object.keys(ev.rsvps||{}).length;
+          const evJ=JSON.stringify(JSON.stringify(ev));
+          const editBtns = can.edit()
+            ? `<button class="btn btn-sm" onclick="openRsvpModal('${ev.id}')">RSVPs</button><button class="btn btn-sm btn-ghost" onclick="openEvtModal(${evJ})">Edit</button><button class="btn btn-sm btn-danger btn-ghost" onclick="delEvent('${ev.id}')">Delete</button>`
+            : `<button class="btn btn-sm btn-ghost" onclick="openRsvpModal('${ev.id}')">View RSVPs</button>`;
+          return `<div class="event-card">
+            <div class="event-icon" style="background:${ev.type==='Race'?'var(--race-bg)':'var(--accent-bg)'}">${ev.type==='Race'?'🏁':'🚣'}</div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap"><span class="event-name">${esc(ev.name)}</span><span class="badge badge-${ev.type.toLowerCase()}">${ev.type}</span></div>
+              <div class="event-meta"><span>📅 ${fmtDate(ev.date)}</span><span>🕐 ${fmtTime(ev.time)}</span><span>📍 ${esc(ev.location)}</span></div>
+              <div class="event-tally"><span style="color:var(--success)">✓ ${yes}</span><span style="color:var(--danger)">✗ ${no}</span><span style="color:var(--text-3)">· ${pend} no reply</span></div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap">${editBtns}</div>
+          </div>`;
+        }).join('');
+      }
+      C.innerHTML = (upcoming.length?`<div class="section-label">Upcoming</div>${cards(upcoming)}`:'')+
+                   (past.length?`<div class="section-label">Past</div>${cards(past)}`:'');
+    });
+  });
+}
+
+window.delEvent = async id => {
+  if(!can.edit())return; if(!confirm('Delete this event?'))return;
+  await db.ref('events/'+id).remove(); await db.ref('lineups/'+id).remove(); showToast('Event deleted','🗑');
+};
+
+function openEvtModal(evJson) {
+  if (!can.edit()) return; closeModal();
+  const ev = evJson ? JSON.parse(typeof evJson==='string'?evJson:JSON.stringify(evJson)) : null;
+  const e  = ev || { id:uid('e'), name:'', type:'Practice', date:'', time:'', location:'', rsvps:{} };
+  const isNew = !ev;
+  const overlay = document.createElement('div'); overlay.className='overlay';
+  overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
+  overlay.innerHTML=`<div class="modal">
+    <div class="modal-header"><div class="modal-title">${isNew?'Add event':'Edit event'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label class="form-label">Event name *</label><input id="ef-name" value="${esc(e.name)}" placeholder="Tuesday Practice"></div>
+      <div class="form-grid-2" style="margin-bottom:14px">
+        <div class="form-group" style="margin:0"><label class="form-label">Type</label><select id="ef-type"><option ${e.type==='Practice'?'selected':''}>Practice</option><option ${e.type==='Race'?'selected':''}>Race</option></select></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Date *</label><input id="ef-date" type="date" value="${esc(e.date)}"></div>
+      </div>
+      <div class="form-grid-2" style="margin-bottom:0">
+        <div class="form-group" style="margin:0"><label class="form-label">Time</label><input id="ef-time" type="time" value="${esc(e.time)}"></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Location</label><input id="ef-loc" value="${esc(e.location)}" placeholder="Rocky Point Pier"></div>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEvt('${e.id}',${isNew})">Save event</button></div>
+  </div>`;
+  document.body.appendChild(overlay); modalEl=overlay;
+  overlay.querySelector('#ef-name').focus();
+}
+
+window.saveEvt = async (id, isNew) => {
+  if (!can.edit()) return;
+  const name=document.getElementById('ef-name').value.trim(), date=document.getElementById('ef-date').value;
+  if(!name||!date){alert('Name and date are required.');return;}
+  const ev={id,name,date,type:document.getElementById('ef-type').value,time:document.getElementById('ef-time').value,location:document.getElementById('ef-loc').value.trim()};
+  if(isNew) await db.ref('events/'+id).set({...ev,rsvps:{}});
+  else      await db.ref('events/'+id).update(ev);
+  closeModal(); showToast(isNew?'Event added':'Event updated','✓');
+};
+
+window.openRsvpModal = function(evId) {
+  closeModal();
+  Promise.all([db.ref('events/'+evId).get(), db.ref('users').get()]).then(([evSnap,uSnap]) => {
+    const ev = evSnap.val();
+    const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+    const rsvps = {...(ev.rsvps||{})};
+    const ed = can.edit();
+    const overlay = document.createElement('div'); overlay.className='overlay';
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+    overlay._rsvps = rsvps;
+    overlay.innerHTML=`<div class="modal">
+      <div class="modal-header"><div><div class="modal-title">RSVPs — ${esc(ev.name)}</div><div class="modal-sub">${fmtDate(ev.date)} · ${fmtTime(ev.time)} · ${esc(ev.location)}</div></div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        ${members.map(m=>{const cur=rsvps[m.uid]||''; return `<div class="rsvp-row">
+          <div class="avatar">${initials(m.name)}</div>
+          <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc(m.paddlerRole||'Paddler')} · ${esc(m.side||'—')}</div></div>
+          ${ed?`<div class="rsvp-btns">
+            <button class="rsvp-btn ${cur==='yes'?'going':''}" onclick="setRsvp('${m.uid}','yes',this)">✓ Going</button>
+            <button class="rsvp-btn ${cur==='no'?'notgoing':''}" onclick="setRsvp('${m.uid}','no',this)">✗ No</button>
+            <button class="rsvp-btn" onclick="setRsvp('${m.uid}','',this)">—</button>
+          </div>`:`<span class="badge ${cur==='yes'?'badge-yes':cur==='no'?'badge-no':''}">${cur==='yes'?'Going':cur==='no'?'Not going':'No reply'}</span>`}
+        </div>`; }).join('')}
+      </div>
+      <div class="modal-footer"><button class="btn" onclick="closeModal()">${ed?'Cancel':'Close'}</button>${ed?`<button class="btn btn-primary" onclick="saveRsvps('${evId}')">Save RSVPs</button>`:''}</div>
+    </div>`;
+    document.body.appendChild(overlay); modalEl=overlay;
+  });
+};
+window.setRsvp = (uid,val,btn) => {
+  if(!can.edit())return;
+  if(val==='') delete modalEl._rsvps[uid]; else modalEl._rsvps[uid]=val;
+  btn.closest('.rsvp-btns').querySelectorAll('.rsvp-btn').forEach(b=>b.classList.remove('going','notgoing'));
+  if(val==='yes')btn.classList.add('going'); else if(val==='no')btn.classList.add('notgoing');
+};
+window.saveRsvps = async evId => {
+  if(!can.edit())return;
+  await db.ref('events/'+evId+'/rsvps').set(modalEl._rsvps);
+  closeModal(); showToast('RSVPs saved','✓');
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ATTENDANCE
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgAttendance() {
+  const C = document.getElementById('pg-content');
+  Promise.all([db.ref('users').get(), db.ref('events').get()]).then(([uSnap,evSnap]) => {
+    const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+    const events  = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
+    if (!members.length||!events.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Nothing to show yet</div></div></div>`; return; }
+    const headCols = events.map(ev=>`<th style="text-align:center">
+      <div>${esc(ev.name.length>13?ev.name.slice(0,13)+'…':ev.name)}</div>
+      <div style="font-weight:400;color:var(--text-3);font-size:10px">${fmtDateS(ev.date)}</div>
+      <div style="margin-top:2px"><span class="badge badge-${ev.type.toLowerCase()}" style="font-size:9px">${ev.type}</span></div>
+    </th>`).join('');
+    const rows = members.map(m=>{
+      let att=0,pt=0;
+      const cells=events.map(ev=>{
+        const r=(ev.rsvps||{})[m.uid];
+        if(ev.date<today()){pt++;if(r==='yes')att++;}
+        return `<td style="text-align:center">${r==='yes'?'<span style="color:var(--success);font-size:16px">✓</span>':r==='no'?'<span style="color:var(--danger);font-size:16px">✗</span>':'<span style="color:var(--border-strong)">—</span>'}</td>`;
+      }).join('');
+      const pct=pt>0?Math.round(att/pt*100):null;
+      return `<tr><td><div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc(m.paddlerRole||'Paddler')}</div></div></div></td>${cells}<td style="text-align:center">${pct!==null?`<span class="pct-chip" style="background:${pctBg(pct)};color:${pctColor(pct)}">${pct}%</span>`:'—'}</td></tr>`;
+    }).join('');
+    C.innerHTML=`<div class="table-wrap"><table><thead><tr><th style="min-width:150px">Member</th>${headCols}<th style="text-align:center">Overall</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// REMINDERS
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgReminders() {
+  const C = document.getElementById('pg-content');
+  Promise.all([db.ref('users').get(), db.ref('events').get(), db.ref('settings/teamName').get()]).then(([uSnap,evSnap,tnSnap]) => {
+    const members  = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+    const events   = Object.values(evSnap.val()||{}).filter(e=>e.date>=today()).sort((a,b)=>a.date.localeCompare(b.date));
+    const teamName = tnSnap.val()||TEAM_NAME_DEFAULT;
+    if (!events.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">✉️</div><div class="empty-title">No upcoming events</div></div></div>`; return; }
+
+    window._rd = {};
+    C.innerHTML = events.map(ev => {
+      const nr = members.filter(m=>!(ev.rsvps||{})[m.uid]);
+      const dc = members.filter(m=>(ev.rsvps||{})[m.uid]==='no');
+      function eml(g) {
+        const d=fmtDate(ev.date);
+        return g==='noreply'
+          ? `Hi [name],\n\nThis is a friendly reminder that "${ev.name}" is coming up on ${d} at ${fmtTime(ev.time)}, at ${ev.location}.\n\nWe haven't received your RSVP yet. Please let us know if you'll be attending so we can finalise the lineup.\n\nSee you on the water,\n${teamName}`
+          : `Hi [name],\n\nWe see you've marked yourself as unable to attend "${ev.name}" on ${d} at ${fmtTime(ev.time)}.\n\nIf your plans have changed, you're still welcome to update your RSVP!\n\n${ev.type==='Race'?'If you\'re still unable to join, no worries — we\'ll see you at the next practice.':'We hope to see you soon!'}\n\nBest,\n${teamName}`;
+      }
+      window._rd[ev.id] = { nr, dc, eml, ev };
+      return `<div class="reminder-card" id="rc-${ev.id}">
+        <div class="reminder-header">
+          <span style="font-weight:700;font-size:15px">${esc(ev.name)}</span>
+          <span class="badge badge-${ev.type.toLowerCase()}">${ev.type}</span>
+          <span style="font-size:13px;color:var(--text-2)">${fmtDate(ev.date)} · ${fmtTime(ev.time)}</span>
+        </div>
+        <div class="reminder-tabs">
+          <button class="rtab active" id="rt-nr-${ev.id}" onclick="swRT('${ev.id}','noreply')">No reply (${nr.length})</button>
+          <button class="rtab"        id="rt-dc-${ev.id}" onclick="swRT('${ev.id}','declined')">Declined (${dc.length})</button>
+        </div>
+        <div class="reminder-body" id="rb-${ev.id}"></div>
+      </div>`;
+    }).join('');
+    Object.keys(window._rd).forEach(id => drawRB(id,'noreply'));
+  });
+}
+
+window.swRT = (id, g) => {
+  document.getElementById('rt-nr-'+id).classList.toggle('active',g==='noreply');
+  document.getElementById('rt-dc-'+id).classList.toggle('active',g==='declined');
+  drawRB(id, g);
+};
+function drawRB(id, g) {
+  const el = document.getElementById('rb-'+id); if(!el) return;
+  const d  = window._rd[id];                    if(!d) return;
+  const ms = g==='noreply' ? d.nr : d.dc;
+  const em = d.eml(g);
+  if (!ms.length) { el.innerHTML=`<p style="color:var(--text-3);font-size:13px">No members in this group.</p>`; return; }
+  el.innerHTML=`
+    <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Recipients</div>
+    <div style="margin-bottom:12px">${ms.map(m=>`<span class="recipient-chip"><div class="avatar" style="width:18px;height:18px;font-size:8px">${initials(m.name)}</div>${esc(m.name)}</span>`).join('')}</div>
+    <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Email preview</div>
+    <div class="email-preview">${esc(em)}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="cpyEml('${id}','${g}')">Copy email text</button>
+      <button class="btn btn-sm" onclick="cpyAdr('${id}','${g}')">Copy addresses</button>
+      <button class="btn btn-sm" onclick="mlto('${id}','${g}')">Open in mail app ↗</button>
+    </div>`;
+  el._ms=ms; el._em=em;
+}
+window.cpyEml = (id,g) => { const em=window._rd[id]?.eml(g)||''; navigator.clipboard.writeText(em).then(()=>showToast('Copied!','📋')).catch(()=>showToast('Select text manually')); };
+window.cpyAdr = (id,g) => { const d=window._rd[id]; if(!d)return; const ms=g==='noreply'?d.nr:d.dc; navigator.clipboard.writeText(ms.map(m=>`${m.name} <${m.email}>`).join(', ')).then(()=>showToast('Addresses copied!','📋')); };
+window.mlto   = (id,g) => { const d=window._rd[id]; if(!d)return; const ms=g==='noreply'?d.nr:d.dc; window.open(`mailto:${ms.map(m=>m.email).join(',')}?subject=${encodeURIComponent('Reminder: '+d.ev.name+' on '+fmtDate(d.ev.date))}&body=${encodeURIComponent(d.eml(g))}`); };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// APPROVALS
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgApprovals() {
+  if (!can.admin()) { navigate('roster'); return; }
+  const C = document.getElementById('pg-content');
+  db.ref('users').on('value', snap => {
+    const all      = Object.values(snap.val()||{});
+    const pending  = all.filter(u=>!u.approved);
+    const approved = all.filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+    C.innerHTML =
+      (pending.length
+        ? `<div class="section-label" style="color:var(--danger-text)">⏳ Pending (${pending.length})</div>
+           <div class="table-wrap" style="margin-bottom:24px"><table>
+             <thead><tr><th>Member</th><th>Requested role</th><th>Joined</th><th>Actions</th></tr></thead>
+             <tbody>${pending.map(u=>`<tr>
+               <td><div class="member-cell"><div class="avatar">${initials(u.name)}</div><div><div class="mname">${esc(u.name)}</div><div class="msub">${esc(u.email)}</div></div></div></td>
+               <td>${roleBadge(u.role)}</td>
+               <td style="font-size:13px;color:var(--text-2)">${u.joinedAt?new Date(u.joinedAt).toLocaleDateString():''}</td>
+               <td><div style="display:flex;gap:6px;align-items:center">
+                 <select id="rs-${u.uid}" style="width:100px;padding:6px 8px;font-size:13px">
+                   <option value="paddler" ${u.role==='paddler'?'selected':''}>Paddler</option>
+                   <option value="coach"   ${u.role==='coach'?'selected':''}>Coach</option>
+                   <option value="admin"   ${u.role==='admin'?'selected':''}>Admin</option>
+                 </select>
+                 <button class="btn btn-sm" style="background:var(--success-bg);color:var(--success-text);border-color:var(--success)" onclick="approveU('${u.uid}')">✓ Approve</button>
+                 <button class="btn btn-sm btn-danger btn-ghost" onclick="rejectU('${u.uid}')">✗ Reject</button>
+               </div></td>
+             </tr>`).join('')}</tbody>
+           </table></div>`
+        : `<div class="card" style="padding:14px 20px;margin-bottom:24px;background:var(--success-bg);color:var(--success-text);border-color:var(--success)">✓ No pending approvals</div>`)
+      + `<div class="section-label">All members</div>
+         <div class="table-wrap"><table>
+           <thead><tr><th>Member</th><th>Email</th><th>Current role</th><th>Change role</th></tr></thead>
+           <tbody>${approved.map(u=>`<tr>
+             <td><div class="member-cell"><div class="avatar">${initials(u.name)}</div><div class="mname">${esc(u.name)}</div></div></td>
+             <td style="font-size:13px;color:var(--text-2)">${esc(u.email)}</td>
+             <td>${roleBadge(u.role)}</td>
+             <td><div style="display:flex;gap:6px;align-items:center">
+               <select id="rc-${u.uid}" style="width:100px;padding:6px 8px;font-size:13px">
+                 <option value="paddler" ${u.role==='paddler'?'selected':''}>Paddler</option>
+                 <option value="coach"   ${u.role==='coach'?'selected':''}>Coach</option>
+                 <option value="admin"   ${u.role==='admin'?'selected':''}>Admin</option>
+               </select>
+               <button class="btn btn-sm" onclick="chgRole('${u.uid}')">Save</button>
+               ${u.uid!==currentUser.uid?`<button class="btn btn-sm btn-danger btn-ghost" onclick="unapprove('${u.uid}')">Remove</button>`:''}
+             </div></td>
+           </tr>`).join('')}</tbody>
+         </table></div>`;
+  });
+}
+window.approveU = async uid => { const role=document.getElementById('rs-'+uid)?.value||'paddler'; await db.ref('users/'+uid).update({approved:true,role}); showToast('Member approved','✓'); };
+window.rejectU  = async uid => { if(!confirm('Delete this request?'))return; await db.ref('users/'+uid).remove(); showToast('Request rejected','🗑'); };
+window.chgRole  = async uid => {
+  const role=document.getElementById('rc-'+uid)?.value; if(!role)return;
+  await db.ref('users/'+uid+'/role').set(role);
+  if(uid===currentUser.uid){currentProfile.role=role;buildSidebar();renderSidebarUser();}
+  showToast('Role updated','✓');
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgSettings() {
+  if (!can.admin()) { navigate('roster'); return; }
+  const C = document.getElementById('pg-content');
+  db.ref('settings').get().then(snap => {
+    const s = snap.val()||{};
+    C.innerHTML=`<div class="card" style="padding:24px;max-width:480px">
+      <div style="font-size:16px;font-weight:700;margin-bottom:16px">Team settings</div>
+      <div class="form-group"><label class="form-label">Team name</label><input id="s-name" value="${esc(s.teamName||TEAM_NAME_DEFAULT)}"></div>
+      <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
+    </div>`;
+  });
+}
+window.saveSettings = async () => {
+  const name=document.getElementById('s-name').value.trim();
+  if(!name){alert('Team name is required.');return;}
+  await db.ref('settings/teamName').set(name);
+  showToast('Settings saved','✓');
+};
+
+// ─── Mobile sidebar ────────────────────────────────────────────────────────────
+function openSidebar()  { document.getElementById('sidebar').classList.add('mob-open');    document.getElementById('mobOverlay').classList.add('open'); }
+function closeSidebar() { document.getElementById('sidebar').classList.remove('mob-open'); document.getElementById('mobOverlay').classList.remove('open'); }
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+
+// ─── Start ─────────────────────────────────────────────────────────────────────
+initApp();
+</script>
+</body>
+</html>
