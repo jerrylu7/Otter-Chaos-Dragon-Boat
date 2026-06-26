@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dragon Boat Team</title>
+<title>Otter Chaos Dragon Boat</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -25,7 +25,7 @@ const FIREBASE_CONFIG = {
   appId: "1:219671607144:web:418e80a4610666b7c188dd",
   measurementId: "G-92YNJ5QNL5"
 };
-const TEAM_NAME_DEFAULT = "Dragon Boat Team"; // shown on login screen before team name is set
+const TEAM_NAME_DEFAULT = "Otter Chaos Dragon Boat";
 </script>
 <!-- ============================================================ -->
 
@@ -287,9 +287,10 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 <div id="auth-screen" style="display:none">
   <div class="auth-card">
     <div class="auth-logo">
-      <span class="dragon">🐉</span>
-      <div class="app-name" id="auth-team-name">Dragon Boat Team</div>
-      <div class="app-sub">Sign in to your team</div>
+      <div id="auth-logo-img" style="margin-bottom:10px;display:none"><img id="auth-logo-el" src="" alt="Team logo" style="max-height:80px;max-width:200px;object-fit:contain;border-radius:8px"></div>
+      <span class="dragon" id="auth-logo-emoji">🐉</span>
+      <div class="app-name" id="auth-team-name">Otter Chaos Dragon Boat</div>
+      <div class="app-sub">otterchaosdragonboat.com</div>
     </div>
 
     <div class="auth-tabs">
@@ -332,8 +333,9 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-logo">
-        <div class="dragon">🐉</div>
-        <div class="team-name" id="sb-team-name">Dragon Boat Team</div>
+        <div id="sb-logo-img" style="display:none;margin-bottom:6px"><img id="sb-logo-el" src="" alt="" style="max-height:48px;max-width:160px;object-fit:contain;border-radius:6px"></div>
+        <div class="dragon" id="sb-logo-emoji">🐉</div>
+        <div class="team-name" id="sb-team-name">Otter Chaos Dragon Boat</div>
         <div class="team-sub">Team Tracker</div>
       </div>
       <nav class="sidebar-nav" id="sb-nav"></nav>
@@ -342,7 +344,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
     <div class="main">
       <div class="mobile-topbar">
         <button class="hamburger" onclick="openSidebar()">☰</button>
-        <span style="font-weight:800;font-size:16px">🐉 Dragon Boat</span>
+        <span style="font-weight:800;font-size:15px" id="mob-team-name">🐉 Otter Chaos</span>
       </div>
       <div class="topbar" id="topbar">
         <div>
@@ -421,7 +423,36 @@ function initApp() {
 }
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
+function applyLogo(url) {
+  const sbImg = document.getElementById('sb-logo-img');
+  const sbEl  = document.getElementById('sb-logo-el');
+  const sbEmoji = document.getElementById('sb-logo-emoji');
+  const authImg = document.getElementById('auth-logo-img');
+  const authEl  = document.getElementById('auth-logo-el');
+  const authEmoji = document.getElementById('auth-logo-emoji');
+  if (url) {
+    if (sbImg)  { sbImg.style.display='block'; sbEl.src=url; }
+    if (sbEmoji) sbEmoji.style.display='none';
+    if (authImg) { authImg.style.display='block'; authEl.src=url; }
+    if (authEmoji) authEmoji.style.display='none';
+  } else {
+    if (sbImg)  sbImg.style.display='none';
+    if (sbEmoji) sbEmoji.style.display='';
+    if (authImg) authImg.style.display='none';
+    if (authEmoji) authEmoji.style.display='';
+  }
+}
+
 function startAuth() {
+  // Pre-load team name + logo on auth screen without requiring login
+  db.ref('settings').get().then(s => {
+    const sv = s.val()||{};
+    if (sv.teamName) {
+      document.getElementById('auth-team-name').textContent = sv.teamName;
+      document.getElementById('sb-team-name').textContent   = sv.teamName;
+    }
+    if (sv.logoUrl) applyLogo(sv.logoUrl);
+  }).catch(()=>{});
   auth.onAuthStateChanged(async user => {
     if (!user) { showAuth(); return; }
     currentUser = user;
@@ -505,6 +536,13 @@ function bootApp() {
   db.ref('settings/teamName').on('value', s => {
     const n = s.val()||TEAM_NAME_DEFAULT;
     document.getElementById('sb-team-name').textContent = n;
+    document.getElementById('auth-team-name').textContent = n;
+    const mob = document.getElementById('mob-team-name');
+    if (mob) mob.textContent = '🐉 ' + (n.length>16 ? n.slice(0,16)+'…' : n);
+  });
+  db.ref('settings/logoUrl').on('value', s => {
+    const url = s.val()||'';
+    applyLogo(url);
   });
   navigate('roster');
 }
@@ -852,12 +890,12 @@ function pgEvents() {
           const pend=mc-Object.keys(ev.rsvps||{}).length;
           const evJ=JSON.stringify(JSON.stringify(ev));
           const editBtns = can.edit()
-            ? `<button class="btn btn-sm" onclick="openRsvpModal('${ev.id}')">RSVPs</button><button class="btn btn-sm btn-ghost" onclick="openEvtModal(${evJ})">Edit</button><button class="btn btn-sm btn-danger btn-ghost" onclick="delEvent('${ev.id}')">Delete</button>`
+            ? `<button class="btn btn-sm" onclick="openRsvpModal('${ev.id}')">RSVPs</button><button class="btn btn-sm btn-ghost" onclick="openEvtModal(${evJ})">Edit</button><button class="btn btn-sm btn-danger btn-ghost" onclick="delEvent('${ev.id}')">Delete</button>${ev.recurGroup?`<button class="btn btn-sm btn-ghost" style="color:var(--danger-text);font-size:11px" onclick="delSeries('${ev.recurGroup}')">Delete series</button>`:''}`
             : `<button class="btn btn-sm btn-ghost" onclick="openRsvpModal('${ev.id}')">View RSVPs</button>`;
           return `<div class="event-card">
             <div class="event-icon" style="background:${ev.type==='Race'?'var(--race-bg)':'var(--accent-bg)'}">${ev.type==='Race'?'🏁':'🚣'}</div>
             <div style="flex:1;min-width:0">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap"><span class="event-name">${esc(ev.name)}</span><span class="badge badge-${ev.type.toLowerCase()}">${ev.type}</span></div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap"><span class="event-name">${esc(ev.name)}</span><span class="badge badge-${ev.type.toLowerCase()}">${ev.type}</span>${ev.recurGroup?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text)">↻ recurring</span>':''}</div>
               <div class="event-meta"><span>📅 ${fmtDate(ev.date)}</span><span>🕐 ${fmtTime(ev.time)}</span><span>📍 ${esc(ev.location)}</span></div>
               <div class="event-tally"><span style="color:var(--success)">✓ ${yes}</span><span style="color:var(--danger)">✗ ${no}</span><span style="color:var(--text-3)">· ${pend} no reply</span></div>
             </div>
@@ -875,11 +913,21 @@ window.delEvent = async id => {
   if(!can.edit())return; if(!confirm('Delete this event?'))return;
   await db.ref('events/'+id).remove(); await db.ref('lineups/'+id).remove(); showToast('Event deleted','🗑');
 };
+window.delSeries = async groupId => {
+  if (!can.edit()) return;
+  if (!confirm('Delete ALL events in this recurring series? This cannot be undone.')) return;
+  const snap = await db.ref('events').orderByChild('recurGroup').equalTo(groupId).get();
+  if (!snap.exists()) return;
+  const batch = {};
+  Object.keys(snap.val()).forEach(id => { batch['events/'+id]=null; batch['lineups/'+id]=null; });
+  await db.ref().update(batch);
+  showToast('Series deleted','🗑');
+};
 
 function openEvtModal(evJson) {
   if (!can.edit()) return; closeModal();
   const ev = evJson ? JSON.parse(typeof evJson==='string'?evJson:JSON.stringify(evJson)) : null;
-  const e  = ev || { id:uid('e'), name:'', type:'Practice', date:'', time:'', location:'', rsvps:{} };
+  const e  = ev || { id:uid('e'), name:'', type:'Practice', date:'', time:'', location:'', rsvps:{}, recurring:'none', recurUntil:'' };
   const isNew = !ev;
   const overlay = document.createElement('div'); overlay.className='overlay';
   overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
@@ -888,12 +936,31 @@ function openEvtModal(evJson) {
     <div class="modal-body">
       <div class="form-group"><label class="form-label">Event name *</label><input id="ef-name" value="${esc(e.name)}" placeholder="Tuesday Practice"></div>
       <div class="form-grid-2" style="margin-bottom:14px">
-        <div class="form-group" style="margin:0"><label class="form-label">Type</label><select id="ef-type"><option ${e.type==='Practice'?'selected':''}>Practice</option><option ${e.type==='Race'?'selected':''}>Race</option></select></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Type</label><select id="ef-type" onchange="toggleRecurring(this.value)">
+          <option ${e.type==='Practice'?'selected':''}>Practice</option>
+          <option ${e.type==='Race'?'selected':''}>Race</option>
+        </select></div>
         <div class="form-group" style="margin:0"><label class="form-label">Date *</label><input id="ef-date" type="date" value="${esc(e.date)}"></div>
       </div>
-      <div class="form-grid-2" style="margin-bottom:0">
+      <div class="form-grid-2" style="margin-bottom:14px">
         <div class="form-group" style="margin:0"><label class="form-label">Time</label><input id="ef-time" type="time" value="${esc(e.time)}"></div>
         <div class="form-group" style="margin:0"><label class="form-label">Location</label><input id="ef-loc" value="${esc(e.location)}" placeholder="Rocky Point Pier"></div>
+      </div>
+      <div id="recurring-section" style="${e.type==='Race'?'display:none':''}">
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:2px">
+          <div class="form-group"><label class="form-label">Repeats</label>
+            <select id="ef-recur" onchange="toggleRecurUntil(this.value)">
+              <option value="none"    ${(e.recurring||'none')==='none'?'selected':''}>Does not repeat</option>
+              <option value="weekly"  ${e.recurring==='weekly'?'selected':''}>Every week</option>
+              <option value="biweekly"${e.recurring==='biweekly'?'selected':''}>Every 2 weeks</option>
+              <option value="monthly" ${e.recurring==='monthly'?'selected':''}>Every month</option>
+            </select>
+          </div>
+          <div id="recur-until-row" style="${(e.recurring&&e.recurring!=='none')?'':'display:none'}">
+            <div class="form-group" style="margin:0"><label class="form-label">Repeat until *</label><input id="ef-recur-until" type="date" value="${esc(e.recurUntil||'')}"></div>
+            <div style="font-size:12px;color:var(--text-3);margin-top:4px">Individual occurrences can be edited or deleted after they're created.</div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEvt('${e.id}',${isNew})">Save event</button></div>
@@ -902,14 +969,59 @@ function openEvtModal(evJson) {
   overlay.querySelector('#ef-name').focus();
 }
 
+window.toggleRecurring = v => {
+  document.getElementById('recurring-section').style.display = v==='Race' ? 'none' : '';
+};
+window.toggleRecurUntil = v => {
+  document.getElementById('recur-until-row').style.display = v==='none' ? 'none' : '';
+};
+
 window.saveEvt = async (id, isNew) => {
   if (!can.edit()) return;
-  const name=document.getElementById('ef-name').value.trim(), date=document.getElementById('ef-date').value;
-  if(!name||!date){alert('Name and date are required.');return;}
-  const ev={id,name,date,type:document.getElementById('ef-type').value,time:document.getElementById('ef-time').value,location:document.getElementById('ef-loc').value.trim()};
-  if(isNew) await db.ref('events/'+id).set({...ev,rsvps:{}});
-  else      await db.ref('events/'+id).update(ev);
-  closeModal(); showToast(isNew?'Event added':'Event updated','✓');
+  const name     = document.getElementById('ef-name').value.trim();
+  const date     = document.getElementById('ef-date').value;
+  const type     = document.getElementById('ef-type').value;
+  const time     = document.getElementById('ef-time').value;
+  const location = document.getElementById('ef-loc').value.trim();
+  const recurring   = (document.getElementById('ef-recur')?.value)||'none';
+  const recurUntil  = (document.getElementById('ef-recur-until')?.value)||'';
+
+  if (!name||!date) { alert('Name and date are required.'); return; }
+  if (recurring!=='none' && !recurUntil) { alert('Please set a "Repeat until" date.'); return; }
+  if (recurUntil && recurUntil <= date)  { alert('"Repeat until" must be after the start date.'); return; }
+
+  const base = { name, date, type, time, location, recurring, recurUntil };
+
+  if (isNew && recurring !== 'none') {
+    // Generate all occurrences
+    const dates = [];
+    let cur = new Date(date+'T12:00:00');
+    const end = new Date(recurUntil+'T12:00:00');
+    const stepDays = { weekly:7, biweekly:14, monthly:0 }[recurring];
+    while (cur <= end) {
+      dates.push(cur.toISOString().slice(0,10));
+      if (recurring==='monthly') {
+        cur = new Date(cur.getFullYear(), cur.getMonth()+1, cur.getDate());
+      } else {
+        cur = new Date(cur.getTime() + stepDays*86400000);
+      }
+    }
+    // Write all occurrences — first one keeps the provided id, rest get new ids
+    const batch = {};
+    dates.forEach((d, i) => {
+      const eid = i===0 ? id : uid('e');
+      const suffix = dates.length>1 ? ` (${new Date(d+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'})})` : '';
+      batch['events/'+eid] = { ...base, id:eid, date:d, name: name+(dates.length>1?suffix:''), recurGroup:id, rsvps:{} };
+    });
+    await db.ref().update(batch);
+    showToast(`Created ${dates.length} recurring event${dates.length>1?'s':''}`, '✓');
+  } else {
+    const ev = { id, ...base };
+    if (isNew) await db.ref('events/'+id).set({...ev, rsvps:{}});
+    else       await db.ref('events/'+id).update(ev);
+    showToast(isNew?'Event added':'Event updated','✓');
+  }
+  closeModal();
 };
 
 window.openRsvpModal = function(evId) {
@@ -1114,17 +1226,67 @@ function pgSettings() {
   const C = document.getElementById('pg-content');
   db.ref('settings').get().then(snap => {
     const s = snap.val()||{};
-    C.innerHTML=`<div class="card" style="padding:24px;max-width:480px">
-      <div style="font-size:16px;font-weight:700;margin-bottom:16px">Team settings</div>
-      <div class="form-group"><label class="form-label">Team name</label><input id="s-name" value="${esc(s.teamName||TEAM_NAME_DEFAULT)}"></div>
-      <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
-    </div>`;
+    C.innerHTML=`
+      <div class="card" style="padding:24px;max-width:520px;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:700;margin-bottom:16px">Team identity</div>
+        <div class="form-group"><label class="form-label">Team name</label><input id="s-name" value="${esc(s.teamName||TEAM_NAME_DEFAULT)}"></div>
+        <div class="form-group">
+          <label class="form-label">Team logo</label>
+          <div id="logo-preview" style="margin-bottom:10px;${s.logoUrl?'':'display:none'}">
+            <img id="logo-preview-img" src="${esc(s.logoUrl||'')}" alt="Current logo" style="max-height:80px;max-width:220px;object-fit:contain;border-radius:8px;border:1px solid var(--border);padding:6px;background:var(--surface-alt)">
+            <br><button class="btn btn-sm btn-danger btn-ghost" style="margin-top:6px" onclick="removeLogo()">Remove logo</button>
+          </div>
+          <label style="display:inline-flex;align-items:center;gap:8px;cursor:pointer;padding:9px 14px;border:1px dashed var(--border-strong);border-radius:var(--radius);font-size:13px;color:var(--text-2);background:var(--surface-alt);transition:all 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border-strong)'">
+            📁 Choose image file
+            <input type="file" id="s-logo-file" accept="image/*" style="display:none" onchange="previewLogo(this)">
+          </label>
+          <div style="font-size:12px;color:var(--text-3);margin-top:6px">PNG, JPG, SVG or WebP · Stored as a URL — paste a direct image link below instead if preferred.</div>
+        </div>
+        <div class="form-group"><label class="form-label">Or paste logo URL directly</label><input id="s-logo-url" value="${esc(s.logoUrl||'')}" placeholder="https://example.com/your-logo.png" oninput="previewLogoUrl(this.value)"></div>
+        <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
+      </div>`;
   });
 }
+
+window.previewLogo = function(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const url = e.target.result;
+    document.getElementById('s-logo-url').value = url;
+    showLogoPreview(url);
+  };
+  reader.readAsDataURL(file);
+};
+
+window.previewLogoUrl = function(url) {
+  if (url) showLogoPreview(url); else hideLogoPreview();
+};
+
+function showLogoPreview(url) {
+  const p = document.getElementById('logo-preview');
+  const i = document.getElementById('logo-preview-img');
+  if (p && i) { i.src=url; p.style.display='block'; }
+}
+function hideLogoPreview() {
+  const p = document.getElementById('logo-preview');
+  if (p) p.style.display='none';
+}
+
+window.removeLogo = async function() {
+  document.getElementById('s-logo-url').value = '';
+  hideLogoPreview();
+  await db.ref('settings/logoUrl').remove();
+  applyLogo('');
+  showToast('Logo removed','🗑');
+};
+
 window.saveSettings = async () => {
-  const name=document.getElementById('s-name').value.trim();
-  if(!name){alert('Team name is required.');return;}
-  await db.ref('settings/teamName').set(name);
+  const name = document.getElementById('s-name').value.trim();
+  if (!name) { alert('Team name is required.'); return; }
+  const logoUrl = document.getElementById('s-logo-url').value.trim();
+  await db.ref('settings').update({ teamName: name, logoUrl: logoUrl||'' });
+  applyLogo(logoUrl);
   showToast('Settings saved','✓');
 };
 
