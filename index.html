@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Otter Chaos Dragon Boat</title>
+<title>OtterChaos</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
 <!-- ============================================================
      🔧 PASTE YOUR FIREBASE CONFIG HERE (one-time setup)
@@ -26,6 +27,13 @@ const FIREBASE_CONFIG = {
   measurementId: "G-92YNJ5QNL5"
 };
 const TEAM_NAME_DEFAULT = "Otter Chaos Dragon Boat";
+const APP_URL = "https://otterchaos.ca"; // ← update to your actual hosted URL
+
+// EmailJS — free auto-email service. Sign up at emailjs.com, create a service
+// and template, then paste your IDs here to enable automatic reminders.
+const EMAILJS_SERVICE_ID  = "YOUR_EMAILJS_SERVICE_ID";
+const EMAILJS_TEMPLATE_ID = "YOUR_EMAILJS_TEMPLATE_ID";
+const EMAILJS_PUBLIC_KEY  = "YOUR_EMAILJS_PUBLIC_KEY";
 </script>
 <!-- ============================================================ -->
 
@@ -124,26 +132,128 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 #app { display: none; min-height: 100vh; }
 .app-shell { display: flex; min-height: 100vh; }
 
-.sidebar { width: 224px; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 50; }
-.sidebar-logo { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
-.sidebar-logo .dragon { font-size: 28px; }
-.sidebar-logo .team-name { font-size: 15px; font-weight: 700; margin-top: 4px; }
-.sidebar-logo .team-sub { font-size: 12px; color: var(--text-3); }
-.sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; }
-.nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--radius); cursor: pointer; color: var(--text-2); font-size: 14px; font-weight: 600; transition: all 0.1s; margin-bottom: 2px; border: none; background: none; width: 100%; text-align: left; font-family: inherit; }
+/* Sidebar — expanded (224px) and collapsed (64px) */
+.sidebar {
+  width: 224px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  position: fixed; top: 0; left: 0; bottom: 0; z-index: 50;
+  transition: width 0.22s cubic-bezier(0.4,0,0.2,1);
+  overflow: hidden;
+}
+.sidebar.collapsed { width: 64px; }
+
+/* Logo area */
+.sidebar-logo {
+  padding: 16px 14px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  min-height: 68px; flex-shrink: 0;
+  overflow: hidden;
+}
+.sb-logo-mark { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; }
+.sb-logo-mark img { max-width: 36px; max-height: 36px; object-fit: contain; border-radius: 6px; }
+.sb-logo-mark .dragon { font-size: 28px; line-height: 1; }
+.sb-logo-text { flex: 1; min-width: 0; overflow: hidden; transition: opacity 0.15s, width 0.22s; }
+.sb-logo-text .team-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-logo-text .team-sub  { font-size: 11px; color: var(--text-3); white-space: nowrap; }
+.sidebar.collapsed .sb-logo-text { opacity: 0; width: 0; pointer-events: none; }
+
+/* Collapse toggle button */
+.sb-toggle {
+  flex-shrink: 0;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: var(--text-3);
+  transition: transform 0.22s, opacity 0.15s, background 0.1s;
+  flex-shrink: 0;
+}
+.sb-toggle:hover { background: var(--surface-alt); color: var(--text); }
+.sidebar.collapsed .sb-toggle { transform: rotate(180deg); }
+/* In collapsed mode, toggle sits inside logo zone still */
+
+/* Nav */
+.sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; overflow-x: hidden; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--radius);
+  cursor: pointer; color: var(--text-2); font-size: 14px; font-weight: 600;
+  transition: background 0.1s, color 0.1s; margin-bottom: 2px;
+  border: none; background: none; width: 100%; text-align: left; font-family: inherit;
+  white-space: nowrap; overflow: hidden;
+  position: relative;
+}
 .nav-item:hover { background: var(--surface-alt); color: var(--text); }
 .nav-item.active { background: var(--accent-bg); color: var(--accent-text); }
-.nav-icon { font-size: 17px; width: 22px; text-align: center; flex-shrink: 0; }
-.nav-badge { margin-left: auto; background: var(--danger-bg); color: var(--danger-text); font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
-.sidebar-user { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
-.user-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--accent-bg); color: var(--accent-text); font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.nav-icon { font-size: 18px; width: 22px; text-align: center; flex-shrink: 0; }
+.nav-label { transition: opacity 0.15s; }
+.sidebar.collapsed .nav-label { opacity: 0; pointer-events: none; }
+.nav-badge {
+  margin-left: auto; background: var(--danger-bg); color: var(--danger-text);
+  font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 10px;
+  min-width: 18px; text-align: center; flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+.sidebar.collapsed .nav-badge { opacity: 0; pointer-events: none; }
+
+/* Tooltip on collapsed icons */
+.sidebar.collapsed .nav-item { justify-content: center; padding: 9px 0; }
+.nav-item .nav-tooltip {
+  display: none;
+  position: absolute; left: 72px; top: 50%; transform: translateY(-50%);
+  background: var(--text); color: var(--surface);
+  font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 6px;
+  white-space: nowrap; pointer-events: none; z-index: 200;
+}
+.nav-item .nav-tooltip::before {
+  content: '';
+  position: absolute; left: -5px; top: 50%; transform: translateY(-50%);
+  border: 5px solid transparent; border-right-color: var(--text); border-left: 0;
+}
+.sidebar.collapsed .nav-item:hover .nav-tooltip { display: block; }
+
+/* Section divider in nav */
+.nav-divider {
+  font-size: 10px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding: 12px 14px 4px; white-space: nowrap;
+  transition: opacity 0.15s;
+}
+.sidebar.collapsed .nav-divider { opacity: 0; }
+
+/* User footer */
+.sidebar-user {
+  padding: 12px 14px; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  overflow: hidden; min-height: 60px;
+}
+.user-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--accent-bg); color: var(--accent-text);
+  font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
 .user-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
 .role-badge { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
-.role-admin   { background: var(--danger-bg);   color: var(--danger-text); }
-.role-coach   { background: var(--warning-bg);  color: var(--warning-text); }
-.role-paddler { background: var(--success-bg);  color: var(--success-text); }
+.role-admin   { background: var(--danger-bg);  color: var(--danger-text); }
+.role-coach   { background: var(--warning-bg); color: var(--warning-text); }
+.role-paddler { background: var(--success-bg); color: var(--success-text); }
+.role-tester  { background: var(--race-bg);    color: var(--race-text); }
+.sb-user-text { flex: 1; min-width: 0; overflow: hidden; transition: opacity 0.15s; }
+.sidebar.collapsed .sb-user-text { opacity: 0; pointer-events: none; width: 0; }
+.sb-signout { flex-shrink: 0; transition: opacity 0.15s; }
+.sidebar.collapsed .sb-signout { opacity: 0; pointer-events: none; }
 
-.main { margin-left: 224px; flex: 1; min-height: 100vh; }
+/* Main shifts with sidebar */
+.main { margin-left: 224px; flex: 1; min-height: 100vh; transition: margin-left 0.22s cubic-bezier(0.4,0,0.2,1); }
+.sidebar.collapsed ~ .app-shell .main,
+.app-shell:has(.sidebar.collapsed) .main { margin-left: 64px; }
+
 .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 40; }
 .page-title { font-size: 20px; font-weight: 800; letter-spacing: -0.4px; }
 .page-sub { font-size: 13px; color: var(--text-3); margin-top: 2px; }
@@ -291,18 +401,25 @@ tbody tr:hover td { background: var(--surface-alt); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-full { min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--text-3); font-size: 14px; }
 
-.mobile-topbar { display: none; background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 16px; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 60; }
+.mobile-topbar { display: none; background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 16px; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 60; }
 .hamburger { background: none; border: none; cursor: pointer; font-size: 22px; color: var(--text); padding: 4px; }
 .mob-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 45; }
 .mob-overlay.open { display: block; }
-.sidebar.mob-open { transform: translateX(0) !important; }
+.sidebar.mob-open { transform: translateX(0) !important; width: 224px !important; }
+.sidebar.mob-open .sb-logo-text,
+.sidebar.mob-open .nav-label,
+.sidebar.mob-open .nav-badge,
+.sidebar.mob-open .sb-user-text,
+.sidebar.mob-open .sb-signout,
+.sidebar.mob-open .nav-divider { opacity: 1 !important; width: auto !important; pointer-events: auto !important; }
+.sidebar.mob-open .nav-item { justify-content: flex-start !important; padding: 9px 12px !important; }
 
 hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
 
 @media (max-width: 768px) {
-  .sidebar { transform: translateX(-100%); transition: transform 0.25s ease; }
-  .main { margin-left: 0; }
+  .sidebar { transform: translateX(-100%); transition: transform 0.25s ease, width 0.22s; width: 224px !important; }
+  .main { margin-left: 0 !important; }
   .mobile-topbar { display: flex; }
   .topbar { display: none; }
   .content { padding: 16px; }
@@ -310,6 +427,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .event-card { flex-wrap: wrap; }
   .auth-card { padding: 24px 20px; }
+  .sb-toggle { display: none; }
 }
 </style>
 </head>
@@ -371,15 +489,20 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-logo">
-        <div id="sb-logo-img" style="display:none;margin-bottom:6px"><img id="sb-logo-el" src="" alt="" style="max-height:48px;max-width:160px;object-fit:contain;border-radius:6px"></div>
-        <div class="dragon" id="sb-logo-emoji">🐉</div>
-        <div class="team-name" id="sb-team-name">Otter Chaos Dragon Boat</div>
-        <div class="team-sub">Team Tracker</div>
+        <div class="sb-logo-mark">
+          <img id="sb-logo-el" src="" alt="" style="display:none;max-width:36px;max-height:36px;object-fit:contain;border-radius:6px">
+          <span class="dragon" id="sb-logo-emoji">🐉</span>
+        </div>
+        <div class="sb-logo-text">
+          <div class="team-name" id="sb-team-name">Otter Chaos Dragon Boat</div>
+          <div class="team-sub">Team Tracker</div>
+        </div>
+        <button class="sb-toggle" id="sb-toggle" onclick="toggleSidebar()" title="Collapse sidebar">‹</button>
       </div>
       <nav class="sidebar-nav" id="sb-nav"></nav>
       <div class="sidebar-user" id="sb-user"></div>
     </aside>
-    <div class="main">
+    <div class="main" id="main-content">
       <div class="mobile-topbar">
         <button class="hamburger" onclick="openSidebar()">☰</button>
         <span style="font-weight:800;font-size:15px" id="mob-team-name">🐉 Otter Chaos</span>
@@ -401,7 +524,12 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 let db, auth, currentUser, currentProfile, currentPage = 'roster', modalEl = null, toastTimer = null;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-const can = { edit: () => ['admin','coach'].includes(currentProfile?.role), admin: () => currentProfile?.role === 'admin' };
+const can = {
+  edit:   () => ['admin','coach'].includes(currentProfile?.role),
+  admin:  () => currentProfile?.role === 'admin',
+  tester: () => currentProfile?.role === 'tester',
+  view:   () => ['admin','coach','tester'].includes(currentProfile?.role),
+};
 const esc   = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const uid   = p  => (p||'id')+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
 const today = () => new Date().toISOString().slice(0,10);
@@ -413,7 +541,7 @@ const pctColor = p => p===null?'var(--text-3)':p>=80?'var(--success)':p>=50?'var
 const pctBg    = p => p===null?'var(--border)':p>=80?'var(--success-bg)':p>=50?'var(--warning-bg)':'var(--danger-bg)';
 
 function roleBadge(r) {
-  const cls = {admin:'role-admin',coach:'role-coach',paddler:'role-paddler'}[r]||'role-paddler';
+  const cls = {admin:'role-admin',coach:'role-coach',paddler:'role-paddler',tester:'role-tester'}[r]||'role-paddler';
   return `<span class="role-badge ${cls}">${r||'paddler'}</span>`;
 }
 
@@ -462,22 +590,21 @@ function initApp() {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 function applyLogo(url) {
-  const sbImg = document.getElementById('sb-logo-img');
-  const sbEl  = document.getElementById('sb-logo-el');
+  const sbEl    = document.getElementById('sb-logo-el');
   const sbEmoji = document.getElementById('sb-logo-emoji');
   const authImg = document.getElementById('auth-logo-img');
   const authEl  = document.getElementById('auth-logo-el');
   const authEmoji = document.getElementById('auth-logo-emoji');
   if (url) {
-    if (sbImg)  { sbImg.style.display='block'; sbEl.src=url; }
-    if (sbEmoji) sbEmoji.style.display='none';
-    if (authImg) { authImg.style.display='block'; authEl.src=url; }
-    if (authEmoji) authEmoji.style.display='none';
+    if (sbEl)    { sbEl.src = url; sbEl.style.display = 'block'; }
+    if (sbEmoji) sbEmoji.style.display = 'none';
+    if (authImg) { authImg.style.display = 'block'; authEl.src = url; }
+    if (authEmoji) authEmoji.style.display = 'none';
   } else {
-    if (sbImg)  sbImg.style.display='none';
-    if (sbEmoji) sbEmoji.style.display='';
-    if (authImg) authImg.style.display='none';
-    if (authEmoji) authEmoji.style.display='';
+    if (sbEl)    sbEl.style.display = 'none';
+    if (sbEmoji) sbEmoji.style.display = '';
+    if (authImg) authImg.style.display = 'none';
+    if (authEmoji) authEmoji.style.display = '';
   }
 }
 
@@ -571,6 +698,11 @@ async function doRegister() {
 function bootApp() {
   buildSidebar();
   renderSidebarUser();
+  restoreSidebarState();
+  // Init EmailJS if configured
+  if (EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('YOUR_')) {
+    emailjs.init(EMAILJS_PUBLIC_KEY);
+  }
   db.ref('settings/teamName').on('value', s => {
     const n = s.val()||TEAM_NAME_DEFAULT;
     document.getElementById('sb-team-name').textContent = n;
@@ -582,43 +714,110 @@ function bootApp() {
     const url = s.val()||'';
     applyLogo(url);
   });
+  // Auto-send reminders for practices 2 days out (runs once on boot for admins/coaches)
+  if (can.edit()) checkAndSendAutoReminders();
   navigate('dashboard');
+}
+
+// ─── Auto-reminder engine ─────────────────────────────────────────────────────
+async function checkAndSendAutoReminders() {
+  if (!EMAILJS_PUBLIC_KEY || EMAILJS_PUBLIC_KEY.startsWith('YOUR_')) return; // EmailJS not configured
+
+  const now = new Date();
+  const twoDaysFromNow = new Date(now); twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
+  const twoDaysStr = twoDaysFromNow.toISOString().slice(0,10);
+  const todayStr   = now.toISOString().slice(0,10);
+
+  const [evSnap, uSnap, tnSnap, sentSnap] = await Promise.all([
+    db.ref('events').orderByChild('date').equalTo(twoDaysStr).get(),
+    db.ref('users').get(),
+    db.ref('settings/teamName').get(),
+    db.ref('remindersSent').get(),
+  ]);
+
+  if (!evSnap.exists()) return;
+  const teamName   = tnSnap.val() || TEAM_NAME_DEFAULT;
+  const allUsers   = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+  const sentLog    = sentSnap.val() || {};
+
+  const events = Object.values(evSnap.val()).filter(e => e.type === 'Practice');
+  for (const ev of events) {
+    // Only send once per event per day
+    const sentKey = `${ev.id}_${todayStr}`.replace(/[.#$[\]]/g,'_');
+    if (sentLog[sentKey]) continue;
+
+    const needsRsvp = allUsers.filter(m => !(ev.rsvps||{})[m.uid]);
+    for (const member of needsRsvp) {
+      try {
+        await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+          to_name:    member.first || member.name,
+          to_email:   member.email,
+          event_name: ev.name,
+          event_date: fmtDate(ev.date),
+          event_time: fmtTime(ev.time),
+          event_loc:  ev.location,
+          team_name:  teamName,
+          app_url:    APP_URL,
+        });
+      } catch(e) { console.warn('EmailJS send failed:', e); }
+    }
+
+    if (needsRsvp.length > 0) {
+      // Mark as sent for today so we don't double-send
+      await db.ref('remindersSent/' + sentKey).set({ sentAt: Date.now(), eventId: ev.id, count: needsRsvp.length });
+      console.log(`Auto-reminder sent for "${ev.name}" to ${needsRsvp.length} members`);
+    }
+  }
 }
 
 function buildSidebar() {
   const nav = document.getElementById('sb-nav');
   nav.innerHTML = '';
-  const pages = [
-    { id:'dashboard',  icon:'🏠', label:'My dashboard' },
+
+  // ── Member-facing pages (visible to all) ──
+  const memberPages = [
+    { id:'dashboard', icon:'🏠', label:'Dashboard',  badge:'dash-badge' },
+    { id:'races',     icon:'🏁', label:'Races' },
+    { id:'practices', icon:'🚣', label:'Practices' },
+    { id:'profile',   icon:'👤', label:'My profile' },
+  ];
+
+  // ── Admin/Coach pages (hidden from paddlers) ──
+  const adminPages = [
     { id:'roster',     icon:'👥', label:'Roster' },
-    { id:'lineup',     icon:'🚣', label:'Boat lineup' },
-    { id:'events',     icon:'📅', label:'Events' },
+    { id:'lineup',     icon:'📋', label:'Lineup' },
     { id:'attendance', icon:'✅', label:'Attendance' },
-    { id:'reminders',  icon:'✉️',  label:'Reminders',  editOnly:true },
-    { id:'approvals',  icon:'🔐', label:'Approvals',   adminOnly:true },
+    { id:'reminders',  icon:'✉️',  label:'Reminders' },
+    { id:'approvals',  icon:'🔐', label:'Approvals',  adminOnly:true, badge:'approve-badge' },
     { id:'settings',   icon:'⚙️',  label:'Settings',   adminOnly:true },
   ];
-  pages.forEach(p => {
+
+  function addDivider(label) {
+    const d = document.createElement('div');
+    d.className = 'nav-divider';
+    d.textContent = label;
+    nav.appendChild(d);
+  }
+
+  function addPage(p) {
     if (p.adminOnly && !can.admin()) return;
     if (p.editOnly  && !can.edit())  return;
     const btn = document.createElement('button');
-    btn.className='nav-item'; btn.id='nav-'+p.id;
-    let extraBadge = '';
-    if (p.id==='approvals') extraBadge = ` <span class="nav-badge" id="approve-badge" style="display:none">!</span>`;
-    if (p.id==='dashboard') extraBadge = ` <span class="nav-badge" id="dash-badge" style="display:none"></span>`;
-    btn.innerHTML = `<span class="nav-icon">${p.icon}</span>${p.label}${extraBadge}`;
+    btn.className = 'nav-item'; btn.id = 'nav-'+p.id;
+    const badgeHtml = p.badge ? `<span class="nav-badge" id="${p.badge}" style="display:none"></span>` : '';
+    btn.innerHTML = `<span class="nav-icon">${p.icon}</span><span class="nav-label">${p.label}${badgeHtml}</span><span class="nav-tooltip">${p.label}</span>`;
     btn.onclick = () => navigate(p.id);
     nav.appendChild(btn);
-  });
-  if (can.admin()) {
-    db.ref('users').on('value', snap => {
-      const badge = document.getElementById('approve-badge');
-      if (!badge) return;
-      const n = Object.values(snap.val()||{}).filter(u=>!u.approved).length;
-      badge.textContent=n; badge.style.display=n?'inline-flex':'none';
-    });
   }
-  // Dashboard badge: count upcoming events where current user hasn't responded
+
+  memberPages.forEach(addPage);
+
+  if (can.view()) {
+    addDivider('Team management');
+    adminPages.forEach(addPage);
+  }
+
+  // Live badges
   db.ref('events').on('value', snap => {
     const badge = document.getElementById('dash-badge');
     if (!badge) return;
@@ -626,24 +825,53 @@ function buildSidebar() {
     const pending = evs.filter(e => e.date >= today() && !(e.rsvps||{})[currentUser.uid]).length;
     badge.textContent = pending; badge.style.display = pending ? 'inline-flex' : 'none';
   });
+  if (can.admin()) {
+    db.ref('users').on('value', snap => {
+      const badge = document.getElementById('approve-badge');
+      if (!badge) return;
+      const n = Object.values(snap.val()||{}).filter(u=>!u.approved).length;
+      badge.textContent = n; badge.style.display = n ? 'inline-flex' : 'none';
+    });
+  }
 }
 
 function renderSidebarUser() {
   const p = currentProfile;
   document.getElementById('sb-user').innerHTML = `
     <div class="user-avatar">${initials(p.name)}</div>
-    <div style="flex:1;min-width:0">
+    <div class="sb-user-text" style="flex:1;min-width:0">
       <div class="user-name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.name)}</div>
       <div>${roleBadge(p.role)}</div>
     </div>
-    <button class="btn btn-sm btn-ghost" onclick="auth.signOut()" title="Sign out" style="padding:6px;flex-shrink:0">↩</button>`;
+    <button class="btn btn-sm btn-ghost sb-signout" onclick="auth.signOut()" title="Sign out" style="padding:6px;flex-shrink:0">↩</button>`;
+}
+
+let sidebarCollapsed = false;
+function toggleSidebar() {
+  sidebarCollapsed = !sidebarCollapsed;
+  const sb   = document.getElementById('sidebar');
+  const main = document.getElementById('main-content');
+  sb.classList.toggle('collapsed', sidebarCollapsed);
+  if (main) main.style.marginLeft = sidebarCollapsed ? '64px' : '224px';
+  localStorage.setItem('sb_collapsed', sidebarCollapsed ? '1' : '0');
+}
+function restoreSidebarState() {
+  sidebarCollapsed = localStorage.getItem('sb_collapsed') === '1';
+  if (sidebarCollapsed) {
+    document.getElementById('sidebar').classList.add('collapsed');
+    const main = document.getElementById('main-content');
+    if (main) main.style.marginLeft = '64px';
+  }
 }
 
 const PAGE_META = {
   dashboard:  { title:'My dashboard',  sub:'Your upcoming events and RSVP status' },
+  races:      { title:'Races',         sub:'Upcoming and past race events' },
+  practices:  { title:'Practices',     sub:'Upcoming and past practice sessions' },
+  profile:    { title:'My profile',    sub:'Your personal details and settings' },
   roster:     { title:'Roster',        sub:'All team members' },
-  lineup:     { title:'Boat lineup',   sub:'Seat assignments for events' },
-  events:     { title:'Events',        sub:'Practices and races' },
+  lineup:     { title:'Lineup',        sub:'Seat assignments for events' },
+  events:     { title:'Events',        sub:'All practices and races' },
   attendance: { title:'Attendance',    sub:'Track who shows up' },
   reminders:  { title:'Reminders',     sub:'Email members who haven\'t responded' },
   approvals:  { title:'Approvals',     sub:'Manage member access and roles' },
@@ -660,7 +888,7 @@ function navigate(page) {
   document.getElementById('pg-actions').innerHTML = '';
   document.getElementById('pg-content').innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading…</div>';
   closeSidebar();
-  ({ dashboard:pgDashboard, roster:pgRoster, lineup:pgLineup, events:pgEvents, attendance:pgAttendance, reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
+  ({ dashboard:pgDashboard, races:pgRaces, practices:pgPractices, profile:pgProfile, roster:pgRoster, lineup:pgLineup, events:pgEvents, attendance:pgAttendance, reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -679,25 +907,28 @@ function pgDashboard() {
     const allEvents = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
     const lineups   = lineupSnap.val()||{};
     const now = today();
+    const oneWeekOut = new Date(); oneWeekOut.setDate(oneWeekOut.getDate() + 7);
+    const weekStr = oneWeekOut.toISOString().slice(0,10);
 
-    const upcoming = allEvents.filter(e => e.date >= now);
+    const upcoming = allEvents.filter(e => e.date >= now && e.date <= weekStr);
+    const allUpcoming = allEvents.filter(e => e.date >= now); // for stats
     const past     = allEvents.filter(e => e.date <  now);
 
     // Stats
     const totalPast    = past.length;
     const attendedPast = past.filter(e => (e.rsvps||{})[uid]==='yes').length;
-    const pendingCount = upcoming.filter(e => !(e.rsvps||{})[uid]).length;
+    const pendingCount = allUpcoming.filter(e => !(e.rsvps||{})[uid]).length;
     const attPct       = totalPast ? Math.round(attendedPast/totalPast*100) : null;
 
     // Greeting
     const hour = new Date().getHours();
     const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-    // Find my seat for each upcoming event
+    // Find my seat for each event
     function mySeat(evId) {
       const ev_lineup = lineups[evId]||{};
       for (const [k,v] of Object.entries(ev_lineup)) {
-        if (v === uid) return k.replace('_',' ');
+        if (v === uid) return k.replace(/_/g,' ');
       }
       return null;
     }
@@ -706,12 +937,12 @@ function pgDashboard() {
     let html = `
       <div class="dash-welcome">
         <div class="greeting">${greet}, ${esc(p.first || p.name.split(' ')[0])} 👋</div>
-        <div class="sub">${pendingCount > 0 ? `You have <strong>${pendingCount}</strong> upcoming event${pendingCount!==1?'s':''} awaiting your RSVP.` : 'You\'re all caught up — no pending RSVPs!'}</div>
+        <div class="sub">${pendingCount > 0 ? `You have <strong>${pendingCount}</strong> event${pendingCount!==1?'s':''} awaiting your RSVP.` : 'You\'re all caught up — no pending RSVPs!'}</div>
       </div>
 
       <div class="dash-stats">
         <div class="dash-stat">
-          <div class="dash-stat-val" style="color:var(--accent)">${upcoming.length}</div>
+          <div class="dash-stat-val" style="color:var(--accent)">${allUpcoming.length}</div>
           <div class="dash-stat-label">Upcoming</div>
         </div>
         <div class="dash-stat">
@@ -731,8 +962,9 @@ function pgDashboard() {
     // ── Upcoming events ──
     html += `<div class="dash-section-title">Upcoming events</div>`;
 
+    html += `<div class="dash-section-title">This week's events</div>`;
     if (!upcoming.length) {
-      html += `<div class="card" style="padding:0"><div class="dash-empty">No upcoming events scheduled yet.</div></div>`;
+      html += `<div class="card" style="padding:0"><div class="dash-empty">No events in the next 7 days.<br><span style="font-size:13px">Check <a href="#" onclick="navigate('practices');return false" style="color:var(--accent)">Practices</a> or <a href="#" onclick="navigate('races');return false" style="color:var(--accent)">Races</a> for the full schedule.</span></div></div>`;
     } else {
       html += upcoming.map(ev => {
         const rsvp = (ev.rsvps||{})[uid] || '';
@@ -853,16 +1085,319 @@ window.dashRsvp = async function(evId, val, btn) {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// RACES
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgRaces() {
+  pgFilteredEvents('Race');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRACTICES
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgPractices() {
+  pgFilteredEvents('Practice');
+}
+
+// Shared renderer for Races / Practices member view
+function pgFilteredEvents(typeFilter) {
+  const C = document.getElementById('pg-content');
+  const A = document.getElementById('pg-actions');
+  const uid = currentUser.uid;
+
+  // Coaches/admins can add events from here too
+  if (can.edit()) {
+    const b = document.createElement('button');
+    b.className = 'btn btn-primary';
+    b.innerHTML = `＋ Add ${typeFilter.toLowerCase()}`;
+    b.onclick = () => {
+      // Pre-select the type in the event modal
+      openEvtModal(null, typeFilter);
+    };
+    A.appendChild(b);
+  }
+
+  db.ref('events').orderByChild('date').on('value', snap => {
+    db.ref('lineups').get().then(lSnap => {
+      const lineups = lSnap.val() || {};
+      const all = Object.values(snap.val()||{})
+        .filter(e => e.type === typeFilter)
+        .sort((a,b) => a.date.localeCompare(b.date));
+      const now = today();
+      const upcoming = all.filter(e => e.date >= now);
+      const past     = all.filter(e => e.date <  now).reverse();
+
+      function mySeat(evId) {
+        const ev_lineup = lineups[evId]||{};
+        for (const [k,v] of Object.entries(ev_lineup)) {
+          if (v === uid) return k.replace(/_/g,' ');
+        }
+        return null;
+      }
+
+      if (!all.length) {
+        C.innerHTML = `<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">${typeFilter==='Race'?'🏁':'🚣'}</div><div class="empty-title">No ${typeFilter.toLowerCase()}s yet</div></div></div>`;
+        return;
+      }
+
+      function renderCards(events, isPast) {
+        return events.map(ev => {
+          const rsvp  = (ev.rsvps||{})[uid] || '';
+          const seat  = mySeat(ev.id);
+          const statusPill = rsvp==='yes'
+            ? `<span class="rsvp-status-pill yes">✓ Going</span>`
+            : rsvp==='no'
+            ? `<span class="rsvp-status-pill no">✗ Not going</span>`
+            : `<span class="rsvp-status-pill pending">⏳ No reply</span>`;
+          const seatInfo = seat ? `<div class="dash-my-seat">🚣 Your seat: <strong>${esc(seat)}</strong></div>` : '';
+          const daysUntil = Math.round((new Date(ev.date+'T12:00:00') - new Date()) / 86400000);
+          const daysLabel = isPast ? '' : daysUntil===0 ? '🔴 Today!' : daysUntil===1 ? '🟡 Tomorrow' : `${daysUntil}d away`;
+          const borderClass = isPast ? '' : rsvp==='yes' ? 'rsvp-yes' : rsvp==='no' ? 'rsvp-no' : 'rsvp-pending';
+          const yesCount = Object.values(ev.rsvps||{}).filter(v=>v==='yes').length;
+          const editBtns = can.edit() && !isPast
+            ? `<div style="display:flex;gap:5px;margin-top:8px">
+                <button class="btn btn-sm btn-ghost" onclick='openEvtModal(${JSON.stringify(JSON.stringify(ev))})'>Edit</button>
+                <button class="btn btn-sm btn-danger btn-ghost" onclick="delEvent('${ev.id}')">Delete</button>
+                ${ev.recurGroup?`<button class="btn btn-sm btn-ghost" style="color:var(--danger-text);font-size:11px" onclick="delSeries('${ev.recurGroup}')">Delete series</button>`:''}
+               </div>` : '';
+          return `<div class="event-rsvp-card ${borderClass}" id="ecard-${ev.id}">
+            <div class="event-rsvp-icon" style="background:${typeFilter==='Race'?'var(--race-bg)':'var(--accent-bg)'}">${typeFilter==='Race'?'🏁':'🚣'}</div>
+            <div class="event-rsvp-info">
+              <div class="event-rsvp-name">
+                ${esc(ev.name)}
+                ${ev.recurGroup?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text);font-size:10px;margin-left:4px">↻</span>':''}
+              </div>
+              <div class="event-rsvp-meta">
+                <span>📅 ${fmtDate(ev.date)}</span>
+                ${ev.time?`<span>🕐 ${fmtTime(ev.time)}</span>`:''}
+                ${ev.location?`<span>📍 ${esc(ev.location)}</span>`:''}
+                ${daysLabel?`<span style="font-weight:700;color:${daysUntil<=1?'var(--danger)':daysUntil<=7?'var(--warning)':'var(--text-3)'}">${daysLabel}</span>`:''}
+                <span style="color:var(--text-3)">✓ ${yesCount} going</span>
+              </div>
+              <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                ${statusPill} ${seatInfo}
+              </div>
+              ${editBtns}
+            </div>
+            ${!isPast ? `<div class="rsvp-action-btns">
+              <button class="rsvp-action-btn ${rsvp==='yes'?'selected-yes':''}" onclick="dashRsvp('${ev.id}','yes',this)">✓ Going</button>
+              <button class="rsvp-action-btn ${rsvp==='no'?'selected-no':''}" onclick="dashRsvp('${ev.id}','no',this)">✗ No</button>
+            </div>` : ''}
+          </div>`;
+        }).join('');
+      }
+
+      let html = '';
+      if (upcoming.length) html += `<div class="dash-section-title">Upcoming</div>${renderCards(upcoming, false)}`;
+      if (past.length)     html += `<div class="dash-section-title" style="margin-top:24px">Past</div>${renderCards(past, true)}`;
+      C.innerHTML = html;
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROFILE
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgProfile() {
+  const C = document.getElementById('pg-content');
+  const p = currentProfile;
+
+  Promise.all([db.ref('events').get(), db.ref('lineups').get()]).then(([evSnap, lSnap]) => {
+    const allEvs   = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
+    const lineups  = lSnap.val()||{};
+    const past     = allEvs.filter(e => e.date < today());
+    const upcoming = allEvs.filter(e => e.date >= today());
+
+    const pastPractices = past.filter(e=>e.type==='Practice');
+    const pastRaces     = past.filter(e=>e.type==='Race');
+    const attPractices  = pastPractices.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
+    const attRaces      = pastRaces.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
+    const totalAtt      = attPractices + attRaces;
+    const totalPast     = past.length;
+    const attPct        = totalPast ? Math.round(totalAtt/totalPast*100) : null;
+    const practicePct   = pastPractices.length ? Math.round(attPractices/pastPractices.length*100) : null;
+    const racePct       = pastRaces.length ? Math.round(attRaces/pastRaces.length*100) : null;
+    const pendingRsvp   = upcoming.filter(e=>!(e.rsvps||{})[p.uid]).length;
+    const upcomingGoing = upcoming.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
+
+    // How many times were they seated
+    const seatedCount = past.filter(evId => {
+      const lup = lineups[evId]||{};
+      return Object.values(lup).includes(p.uid);
+    }).length;
+
+    // Recent 6 past events
+    const recent6 = [...past].reverse().slice(0,6);
+
+    const sides = Array.isArray(p.sides)?p.sides:p.side?[p.side]:[];
+    const roles = Array.isArray(p.paddlerRoles)?p.paddlerRoles:p.paddlerRole?[p.paddlerRole]:['Paddler'];
+
+    function statBlock(val, label, color) {
+      return `<div class="dash-stat">
+        <div class="dash-stat-val" style="color:${color||'var(--text)'}">${val}</div>
+        <div class="dash-stat-label">${label}</div>
+      </div>`;
+    }
+
+    C.innerHTML = `
+      <!-- Identity -->
+      <div class="card" style="padding:24px;margin-bottom:16px;max-width:720px">
+        <div style="display:flex;align-items:center;gap:18px;margin-bottom:18px;flex-wrap:wrap">
+          <div style="width:68px;height:68px;border-radius:50%;background:var(--accent-bg);color:var(--accent-text);font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${initials(p.name)}</div>
+          <div>
+            <div style="font-size:22px;font-weight:800;letter-spacing:-0.4px">${esc(p.name)}</div>
+            <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
+              ${roleBadge(p.role)}
+              ${sides.map(s=>`<span class="badge" style="background:${s==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${s==='Left'?'var(--accent-text)':'var(--success-text)'}">${s}</span>`).join('')}
+              ${roles.map(r=>`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);border:1px solid var(--border)">${r}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;font-size:14px">
+          <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Email</div><div>${esc(p.email)}</div></div>
+          <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Weight</div><div>${p.weight?p.weight+' lbs':'—'}</div></div>
+          <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Emergency</div><div style="font-size:13px">${esc(p.emergency||'—')}</div></div>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div style="max-width:720px">
+        <div class="dash-section-title">My statistics</div>
+        <div class="dash-stats" style="margin-bottom:16px">
+          ${statBlock(totalPast, 'Total events', 'var(--text)')}
+          ${statBlock(totalAtt, 'Attended', 'var(--success)')}
+          ${statBlock(attPct!==null?attPct+'%':'—', 'Overall rate', attPct===null?'var(--text-3)':attPct>=80?'var(--success)':attPct>=50?'var(--warning)':'var(--danger)')}
+          ${statBlock(pendingRsvp, 'Awaiting RSVP', pendingRsvp>0?'var(--warning)':'var(--text-3)')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+          <div class="card" style="padding:16px">
+            <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🚣 Practices</div>
+            <div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${practicePct===null?'var(--text-3)':practicePct>=80?'var(--success)':practicePct>=50?'var(--warning)':'var(--danger)'}">${practicePct!==null?practicePct+'%':'—'}</div>
+            <div style="font-size:13px;color:var(--text-3);margin-top:2px">${attPractices} / ${pastPractices.length} attended</div>
+          </div>
+          <div class="card" style="padding:16px">
+            <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🏁 Races</div>
+            <div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${racePct===null?'var(--text-3)':racePct>=80?'var(--success)':racePct>=50?'var(--warning)':'var(--danger)'}">${racePct!==null?racePct+'%':'—'}</div>
+            <div style="font-size:13px;color:var(--text-3);margin-top:2px">${attRaces} / ${pastRaces.length} attended</div>
+          </div>
+        </div>
+
+        <!-- Upcoming commitment -->
+        <div class="card" style="padding:16px;margin-bottom:20px">
+          <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Upcoming commitment</div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap">
+            <div><span style="font-size:22px;font-weight:800;color:var(--success)">${upcomingGoing}</span><span style="font-size:13px;color:var(--text-3);margin-left:4px">confirmed going</span></div>
+            <div><span style="font-size:22px;font-weight:800;color:var(--warning)">${pendingRsvp}</span><span style="font-size:13px;color:var(--text-3);margin-left:4px">no reply yet</span></div>
+            <div><span style="font-size:22px;font-weight:800;color:var(--text)">${upcoming.length}</span><span style="font-size:13px;color:var(--text-3);margin-left:4px">total upcoming</span></div>
+          </div>
+        </div>
+
+        <!-- Recent history -->
+        ${recent6.length ? `<div class="dash-section-title">Recent history</div>
+        <div class="past-events-table" style="margin-bottom:20px">
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <thead><tr>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Event</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Date</th>
+              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Attended</th>
+            </tr></thead>
+            <tbody>${recent6.map(ev=>{
+              const r=(ev.rsvps||{})[p.uid];
+              const pill=r==='yes'?`<span class="rsvp-status-pill yes">✓ Yes</span>`:r==='no'?`<span class="rsvp-status-pill no">✗ No</span>`:`<span class="rsvp-status-pill pending">— No reply</span>`;
+              return `<tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:10px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></td>
+                <td style="padding:10px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td>
+                <td style="padding:10px 16px;text-align:center">${pill}</td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>` : ''}
+
+        <!-- Edit form -->
+        <div class="dash-section-title">Edit my info</div>
+        <div class="card" style="padding:20px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap">
+            <div>
+              <div class="form-group"><label class="form-label">Weight (lbs)</label><input id="pf-weight" type="number" value="${esc(p.weight||'')}" placeholder="150"></div>
+              <div class="form-group"><label class="form-label">Emergency contact</label><input id="pf-emerg" value="${esc(p.emergency||'')}" placeholder="Name · Phone"></div>
+            </div>
+            <div>
+              <div class="form-group">
+                <label class="form-label">Paddle sides</label>
+                <div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">
+                  ${['Left','Right','Both'].map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-side-${s.toLowerCase()}" ${sides.includes(s)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${s}</label>`).join('')}
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Boat positions</label>
+                <div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">
+                  ${['Paddler','Drummer','Steers'].map(pos=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-pos-${pos.toLowerCase()}" ${roles.includes(pos)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`).join('')}
+                </div>
+              </div>
+            </div>
+          </div>
+          <button class="btn btn-primary" style="margin-top:8px" onclick="saveProfile()">Save changes</button>
+        </div>
+      </div>`;
+  });
+}
+
+window.saveProfile = async function() {
+  const uid = currentUser.uid;
+  const updates = {
+    weight:      document.getElementById('pf-weight').value,
+    sides:       ['Left','Right','Both'].filter(s => document.getElementById('pf-side-'+s.toLowerCase())?.checked),
+    paddlerRoles:['Paddler','Drummer','Steers'].filter(p => document.getElementById('pf-pos-'+p.toLowerCase())?.checked),
+    emergency:   document.getElementById('pf-emerg').value.trim(),
+  };
+  await db.ref('users/'+uid).update(updates);
+  const snap = await db.ref('users/'+uid).get();
+  currentProfile = snap.val();
+  renderSidebarUser();
+  showToast('Profile saved ✓');
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // ROSTER
 // ═══════════════════════════════════════════════════════════════════════════════
 function pgRoster() {
   const C = document.getElementById('pg-content');
   const A = document.getElementById('pg-actions');
+
+  // Redirect paddlers — they shouldn't see roster at all
+  if (!can.view()) { navigate('dashboard'); return; }
+
   if (can.admin()) {
     const b=document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Add member'; b.onclick=()=>openMemberModal(null); A.appendChild(b);
   }
+
+  // Add invite button for admins
+  if (can.admin()) {
+    const ib=document.createElement('button'); ib.className='btn'; ib.innerHTML='🔗 Invite link'; ib.onclick=showInviteModal; A.appendChild(ib);
+  }
+
   db.ref('users').on('value', snap => {
     const members = Object.values(snap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+
+    // Paddlers: name-only list
+    if (!can.edit() && !can.tester()) {
+      C.innerHTML = `
+        <div class="readonly-notice">👁 You can see who's on the team. Contact an admin for details.</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Member</th><th>Position</th><th>Sides</th></tr></thead>
+          <tbody>${members.map(m=>{
+            const sides = Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
+            const roles = Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler'];
+            return `<tr>
+              <td><div class="member-cell"><div class="avatar">${initials(m.name)}</div><div class="mname">${esc(m.name)}</div></div></td>
+              <td style="font-size:13px">${roles.join(', ')}</td>
+              <td>${sides.map(s=>`<span class="badge" style="background:${s==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${s==='Left'?'var(--accent-text)':'var(--success-text)'};margin:1px">${s}</span>`).join(' ')||'—'}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>`;
+      return;
+    }
+
+    // Coach/Tester/Admin: full info
     const lc = members.filter(m=>(Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).includes('Left')).length;
     const rc = members.filter(m=>(Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).includes('Right')).length;
     const avgW = members.length ? Math.round(members.reduce((a,m)=>a+Number(m.weight||0),0)/members.length) : 0;
@@ -873,7 +1408,7 @@ function pgRoster() {
         <div class="metric"><div class="metric-label">Can paddle Right</div><div class="metric-value">${rc}</div></div>
         <div class="metric"><div class="metric-label">Avg weight</div><div class="metric-value">${avgW}<span style="font-size:16px;font-weight:400"> lbs</span></div></div>
       </div>
-      ${!can.admin()?'<div class="readonly-notice">👁 View only — contact an admin to update your info.</div>':''}
+      ${!can.admin()?'<div class="readonly-notice">👁 View only — contact an admin to update member info.</div>':''}
       <div class="table-wrap"><table>
         <thead><tr><th>Member</th><th>App role</th><th>Sides</th><th>Positions</th><th>Weight</th><th>Emergency contact</th>${can.admin()?'<th></th>':''}</tr></thead>
         <tbody>${members.map(m=>`<tr>
@@ -890,6 +1425,28 @@ function pgRoster() {
         </tr>`).join('')}</tbody>
       </table></div>`;
   });
+}
+
+// ── Invite modal ──────────────────────────────────────────────────────────────
+function showInviteModal() {
+  closeModal();
+  const overlay = document.createElement('div'); overlay.className = 'overlay';
+  overlay.addEventListener('click', e => { if(e.target===overlay) closeModal(); });
+  overlay.innerHTML = `<div class="modal">
+    <div class="modal-header">
+      <div><div class="modal-title">🔗 Invite new members</div><div class="modal-sub">Share this link — it takes them straight to the join page</div></div>
+      <button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:14px;font-family:monospace;word-break:break-all;margin-bottom:12px">${APP_URL}</div>
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">When someone opens this link they'll see the sign-in page with the "Join team" tab. After they register, you approve them in <strong>Approvals</strong> and set their role.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="navigator.clipboard.writeText('${APP_URL}').then(()=>showToast('Link copied!','🔗'))">Copy link</button>
+        <a class="btn" href="mailto:?subject=Join ${TEAM_NAME_DEFAULT} on OtterChaos&body=Hey! Join our dragon boat team app here: ${APP_URL}" target="_blank">Share via email ↗</a>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay); modalEl = overlay;
 }
 
 window.unapprove = async uid => {
@@ -919,6 +1476,7 @@ function openMemberModal(mJson) {
         <div class="form-group" style="margin:0"><label class="form-label">App role</label><select id="mf-role">
           <option value="paddler" ${m?.role==='paddler'?'selected':''}>Paddler</option>
           <option value="coach"   ${m?.role==='coach'?'selected':''}>Coach</option>
+          <option value="tester"  ${m?.role==='tester'?'selected':''}>Tester</option>
           <option value="admin"   ${m?.role==='admin'?'selected':''}>Admin</option>
         </select></div>
         <div class="form-group" style="margin:0"><label class="form-label">Weight (lbs)</label><input id="mf-weight" type="number" value="${esc(m?.weight||'')}" placeholder="150"></div>
@@ -979,6 +1537,7 @@ window.saveMember = async (uidArg, isNew) => {
 // LINEUP
 // ═══════════════════════════════════════════════════════════════════════════════
 function pgLineup() {
+  if (!can.view()) { navigate('dashboard'); return; }
   const C = document.getElementById('pg-content');
   db.ref('events').orderByChild('date').on('value', snap => {
     const evs = Object.values(snap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
@@ -1111,6 +1670,7 @@ window.assignSeat  = async (evId,key,uid) => { if(!can.edit())return; await db.r
 // EVENTS
 // ═══════════════════════════════════════════════════════════════════════════════
 function pgEvents() {
+  if (!can.view()) { navigate('practices'); return; }
   const C = document.getElementById('pg-content');
   const A = document.getElementById('pg-actions');
   if (can.edit()) {
@@ -1164,10 +1724,10 @@ window.delSeries = async groupId => {
   showToast('Series deleted','🗑');
 };
 
-function openEvtModal(evJson) {
+function openEvtModal(evJson, defaultType) {
   if (!can.edit()) return; closeModal();
   const ev = evJson ? JSON.parse(typeof evJson==='string'?evJson:JSON.stringify(evJson)) : null;
-  const e  = ev || { id:uid('e'), name:'', type:'Practice', date:'', time:'', location:'', rsvps:{}, recurring:'none', recurUntil:'' };
+  const e  = ev || { id:uid('e'), name:'', type:defaultType||'Practice', date:'', time:'', location:'', rsvps:{}, recurring:'none', recurUntil:'' };
   const isNew = !ev;
   const overlay = document.createElement('div'); overlay.className='overlay';
   overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
@@ -1308,27 +1868,57 @@ window.saveRsvps = async evId => {
 // ATTENDANCE
 // ═══════════════════════════════════════════════════════════════════════════════
 function pgAttendance() {
+  if (!can.view()) { navigate('dashboard'); return; }
   const C = document.getElementById('pg-content');
+
   Promise.all([db.ref('users').get(), db.ref('events').get()]).then(([uSnap,evSnap]) => {
     const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
-    const events  = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
-    if (!members.length||!events.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">Nothing to show yet</div></div></div>`; return; }
-    const headCols = events.map(ev=>`<th style="text-align:center">
-      <div>${esc(ev.name.length>13?ev.name.slice(0,13)+'…':ev.name)}</div>
+    // Only past practices up to today
+    const events  = Object.values(evSnap.val()||{})
+      .filter(e => e.type === 'Practice' && e.date < today())
+      .sort((a,b)=>a.date.localeCompare(b.date));
+
+    if (!members.length||!events.length) {
+      C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">${events.length===0?'No past practices yet':'No members yet'}</div></div></div>`;
+      return;
+    }
+
+    const headCols = events.map(ev=>`<th style="text-align:center;min-width:72px">
+      <div style="font-size:11px">${esc(ev.name.length>11?ev.name.slice(0,11)+'…':ev.name)}</div>
       <div style="font-weight:400;color:var(--text-3);font-size:10px">${fmtDateS(ev.date)}</div>
-      <div style="margin-top:2px"><span class="badge badge-${ev.type.toLowerCase()}" style="font-size:9px">${ev.type}</span></div>
     </th>`).join('');
+
     const rows = members.map(m=>{
-      let att=0,pt=0;
+      let att=0,pt=events.length;
       const cells=events.map(ev=>{
         const r=(ev.rsvps||{})[m.uid];
-        if(ev.date<today()){pt++;if(r==='yes')att++;}
+        if(r==='yes')att++;
         return `<td style="text-align:center">${r==='yes'?'<span style="color:var(--success);font-size:16px">✓</span>':r==='no'?'<span style="color:var(--danger);font-size:16px">✗</span>':'<span style="color:var(--border-strong)">—</span>'}</td>`;
       }).join('');
       const pct=pt>0?Math.round(att/pt*100):null;
-      return `<tr><td><div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler']).join(', '))}</div></div></div></td>${cells}<td style="text-align:center">${pct!==null?`<span class="pct-chip" style="background:${pctBg(pct)};color:${pctColor(pct)}">${pct}%</span>`:'—'}</td></tr>`;
+      return `<tr>
+        <td style="position:sticky;left:0;background:var(--surface);z-index:2;border-right:1px solid var(--border);min-width:150px">
+          <div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler']).join(', '))}</div></div></div>
+        </td>
+        ${cells}
+        <td style="text-align:center;position:sticky;right:0;background:var(--surface);z-index:2;border-left:1px solid var(--border)">${pct!==null?`<span class="pct-chip" style="background:${pctBg(pct)};color:${pctColor(pct)}">${pct}%</span>`:'—'}</td>
+      </tr>`;
     }).join('');
-    C.innerHTML=`<div class="table-wrap"><table><thead><tr><th style="min-width:150px">Member</th>${headCols}<th style="text-align:center">Overall</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+
+    C.innerHTML=`
+      <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">Showing ${events.length} past practice${events.length!==1?'s':''} up to today · Scroll horizontally to see all</div>
+      <div style="overflow-x:auto;border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow)">
+        <table style="width:max-content;min-width:100%;border-collapse:collapse;font-size:14px;background:var(--surface)">
+          <thead style="position:sticky;top:0;z-index:3">
+            <tr>
+              <th style="position:sticky;left:0;z-index:4;background:var(--surface-alt);border-bottom:1px solid var(--border);border-right:1px solid var(--border);min-width:150px;padding:11px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Member</th>
+              ${headCols}
+              <th style="position:sticky;right:0;z-index:4;background:var(--surface-alt);border-bottom:1px solid var(--border);border-left:1px solid var(--border);padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Overall</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
   });
 }
 
@@ -1336,15 +1926,23 @@ function pgAttendance() {
 // REMINDERS
 // ═══════════════════════════════════════════════════════════════════════════════
 function pgReminders() {
+  if (!can.view()) { navigate('dashboard'); return; }
   const C = document.getElementById('pg-content');
+  const emailjsOn = EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('YOUR_');
+  const twoDaysStr = (()=>{ const d=new Date(); d.setDate(d.getDate()+2); return d.toISOString().slice(0,10); })();
   Promise.all([db.ref('users').get(), db.ref('events').get(), db.ref('settings/teamName').get()]).then(([uSnap,evSnap,tnSnap]) => {
     const members  = Object.values(uSnap.val()||{}).filter(u=>u.approved);
     const events   = Object.values(evSnap.val()||{}).filter(e=>e.date>=today()).sort((a,b)=>a.date.localeCompare(b.date));
     const teamName = tnSnap.val()||TEAM_NAME_DEFAULT;
-    if (!events.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">✉️</div><div class="empty-title">No upcoming events</div></div></div>`; return; }
+    const autoTargets = events.filter(e=>e.type==='Practice'&&e.date===twoDaysStr);
+    const emailStatus = emailjsOn
+      ? (autoTargets.length ? 'Will auto-email members for: '+autoTargets.map(e=>e.name).join(', ')+'.' : 'Active — no practices 2 days away right now.')
+      : 'Configure EmailJS in Settings to enable automatic 2-day practice reminders.';
+    const autoBanner = '<div class="'+(emailjsOn?'msg msg-ok':'msg msg-warn')+'" style="display:flex;align-items:flex-start;gap:10px;margin-bottom:16px"><span style="font-size:18px;flex-shrink:0">'+(emailjsOn?'✉️':'⚠️')+'</span><div><div style="font-weight:700">Auto-reminders: '+(emailjsOn?'Active':'Not configured')+'</div><div style="font-size:13px;margin-top:2px">'+emailStatus+'</div></div></div>';
+    if (!events.length) { C.innerHTML=autoBanner+`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">✉️</div><div class="empty-title">No upcoming events</div></div></div>`; return; }
 
     window._rd = {};
-    C.innerHTML = events.map(ev => {
+    C.innerHTML = autoBanner + events.map(ev => {
       const nr = members.filter(m=>!(ev.rsvps||{})[m.uid]);
       const dc = members.filter(m=>(ev.rsvps||{})[m.uid]==='no');
       function eml(g) {
@@ -1418,9 +2016,10 @@ function pgApprovals() {
                <td>${roleBadge(u.role)}</td>
                <td style="font-size:13px;color:var(--text-2)">${u.joinedAt?new Date(u.joinedAt).toLocaleDateString():''}</td>
                <td><div style="display:flex;gap:6px;align-items:center">
-                 <select id="rs-${u.uid}" style="width:100px;padding:6px 8px;font-size:13px">
+                 <select id="rs-${u.uid}" style="width:110px;padding:6px 8px;font-size:13px">
                    <option value="paddler" ${u.role==='paddler'?'selected':''}>Paddler</option>
                    <option value="coach"   ${u.role==='coach'?'selected':''}>Coach</option>
+                   <option value="tester"  ${u.role==='tester'?'selected':''}>Tester</option>
                    <option value="admin"   ${u.role==='admin'?'selected':''}>Admin</option>
                  </select>
                  <button class="btn btn-sm" style="background:var(--success-bg);color:var(--success-text);border-color:var(--success)" onclick="approveU('${u.uid}')">✓ Approve</button>
@@ -1437,9 +2036,10 @@ function pgApprovals() {
              <td style="font-size:13px;color:var(--text-2)">${esc(u.email)}</td>
              <td>${roleBadge(u.role)}</td>
              <td><div style="display:flex;gap:6px;align-items:center">
-               <select id="rc-${u.uid}" style="width:100px;padding:6px 8px;font-size:13px">
+               <select id="rc-${u.uid}" style="width:110px;padding:6px 8px;font-size:13px">
                  <option value="paddler" ${u.role==='paddler'?'selected':''}>Paddler</option>
                  <option value="coach"   ${u.role==='coach'?'selected':''}>Coach</option>
+                 <option value="tester"  ${u.role==='tester'?'selected':''}>Tester</option>
                  <option value="admin"   ${u.role==='admin'?'selected':''}>Admin</option>
                </select>
                <button class="btn btn-sm" onclick="chgRole('${u.uid}')">Save</button>
@@ -1464,6 +2064,7 @@ window.chgRole  = async uid => {
 function pgSettings() {
   if (!can.admin()) { navigate('roster'); return; }
   const C = document.getElementById('pg-content');
+  const emailjsConfigured = EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('YOUR_');
   db.ref('settings').get().then(snap => {
     const s = snap.val()||{};
     C.innerHTML=`
@@ -1484,7 +2085,22 @@ function pgSettings() {
         </div>
         <div class="form-group"><label class="form-label">Or paste logo URL directly</label><input id="s-logo-url" value="${esc(s.logoUrl||'')}" placeholder="https://example.com/your-logo.png" oninput="previewLogoUrl(this.value)"></div>
         <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
-      </div>`;
+      </div>
+
+      <div class="card" style="padding:24px;max-width:520px;margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:16px;font-weight:700">✉️ Auto-reminders</span>
+          <span class="${emailjsConfigured?'rsvp-status-pill yes':'rsvp-status-pill no'}">${emailjsConfigured?'✓ Active':'✗ Not configured'}</span>
+        </div>
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:14px">Auto-reminders email every paddler who hasn't RSVPed to a practice 2 days in advance. To enable, sign up free at <a href="https://emailjs.com" target="_blank" style="color:var(--accent)">emailjs.com</a>, create a service and email template, then paste your IDs in the <code style="background:var(--surface-alt);padding:1px 5px;border-radius:4px;font-size:12px">FIREBASE_CONFIG</code> block at the top of this HTML file.</p>
+        <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:12px;font-family:monospace;color:var(--text-2)">
+          EMAILJS_SERVICE_ID  = "YOUR_EMAILJS_SERVICE_ID"<br>
+          EMAILJS_TEMPLATE_ID = "YOUR_EMAILJS_TEMPLATE_ID"<br>
+          EMAILJS_PUBLIC_KEY  = "YOUR_EMAILJS_PUBLIC_KEY"
+        </div>
+        <p style="font-size:12px;color:var(--text-3);margin-top:10px">Your EmailJS template should include these variables: <code style="font-size:11px">to_name</code>, <code style="font-size:11px">to_email</code>, <code style="font-size:11px">event_name</code>, <code style="font-size:11px">event_date</code>, <code style="font-size:11px">event_time</code>, <code style="font-size:11px">event_loc</code>, <code style="font-size:11px">team_name</code>, <code style="font-size:11px">app_url</code>.</p>
+        ${emailjsConfigured ? `<button class="btn btn-sm" style="margin-top:10px" onclick="checkAndSendAutoReminders().then(()=>showToast('Reminder check complete','✉️'))">Run reminder check now</button>` : ''}
+      </div>`
   });
 }
 
