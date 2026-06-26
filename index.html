@@ -486,7 +486,7 @@ async function doRegister() {
       role: isFirst ? 'admin' : role,
       approved: isFirst,
       joinedAt: Date.now(),
-      side:'', weight:'', emergency:'', paddlerRole:'Paddler'
+      sides:[], weight:'', emergency:'', paddlerRoles:['Paddler']
     });
     if (!isFirst) {
       await auth.signOut();
@@ -585,25 +585,25 @@ function pgRoster() {
   }
   db.ref('users').on('value', snap => {
     const members = Object.values(snap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
-    const lc = members.filter(m=>m.side==='Left').length;
-    const rc = members.filter(m=>m.side==='Right').length;
+    const lc = members.filter(m=>(Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).includes('Left')).length;
+    const rc = members.filter(m=>(Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).includes('Right')).length;
     const avgW = members.length ? Math.round(members.reduce((a,m)=>a+Number(m.weight||0),0)/members.length) : 0;
     C.innerHTML = `
       <div class="metric-grid">
         <div class="metric"><div class="metric-label">Members</div><div class="metric-value">${members.length}</div></div>
-        <div class="metric"><div class="metric-label">Left side</div><div class="metric-value">${lc}</div></div>
-        <div class="metric"><div class="metric-label">Right side</div><div class="metric-value">${rc}</div></div>
-        <div class="metric"><div class="metric-label">Avg weight</div><div class="metric-value">${avgW}<span style="font-size:16px;font-weight:400"> kg</span></div></div>
+        <div class="metric"><div class="metric-label">Can paddle Left</div><div class="metric-value">${lc}</div></div>
+        <div class="metric"><div class="metric-label">Can paddle Right</div><div class="metric-value">${rc}</div></div>
+        <div class="metric"><div class="metric-label">Avg weight</div><div class="metric-value">${avgW}<span style="font-size:16px;font-weight:400"> lbs</span></div></div>
       </div>
       ${!can.admin()?'<div class="readonly-notice">👁 View only — contact an admin to update your info.</div>':''}
       <div class="table-wrap"><table>
-        <thead><tr><th>Member</th><th>App role</th><th>Side</th><th>Position</th><th>Weight</th><th>Emergency contact</th>${can.admin()?'<th></th>':''}</tr></thead>
+        <thead><tr><th>Member</th><th>App role</th><th>Sides</th><th>Positions</th><th>Weight</th><th>Emergency contact</th>${can.admin()?'<th></th>':''}</tr></thead>
         <tbody>${members.map(m=>`<tr>
           <td><div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc(m.email)}</div></div></div></td>
           <td>${roleBadge(m.role)}</td>
-          <td><span class="badge" style="background:${m.side==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${m.side==='Left'?'var(--accent-text)':'var(--success-text)'}">${esc(m.side)||'—'}</span></td>
-          <td>${esc(m.paddlerRole||'Paddler')}</td>
-          <td>${m.weight?esc(m.weight)+' kg':'—'}</td>
+          <td>${(()=>{const s=Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];return s.length?s.map(sv=>`<span class="badge" style="background:${sv==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${sv==='Left'?'var(--accent-text)':'var(--success-text)'};margin:1px">${esc(sv)}</span>`).join(' '):'—';})()}</td>
+          <td>${(()=>{const p=Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler'];return p.join(', ');})()}</td>
+          <td>${m.weight?esc(m.weight)+' lbs':'—'}</td>
           <td style="font-size:13px;color:var(--text-2)">${esc(m.emergency||'—')}</td>
           ${can.admin()?`<td><div style="display:flex;gap:5px">
             <button class="btn btn-sm btn-ghost" onclick='openMemberModal(${JSON.stringify(JSON.stringify(m))})'>Edit</button>
@@ -637,28 +637,29 @@ function openMemberModal(mJson) {
       <div class="form-group"><label class="form-label">Email *</label><input id="mf-email" type="email" placeholder="taylor@email.com"></div>
       <div class="form-group"><label class="form-label">Temp password *</label><input id="mf-pass" type="password" placeholder="Min 6 characters"></div>`
       :`<div class="form-group"><label class="form-label">Name</label><input id="mf-name" value="${esc(m.name)}"></div>`}
-      <div class="form-grid-3" style="margin-bottom:14px">
+      <div class="form-grid-2" style="margin-bottom:14px">
         <div class="form-group" style="margin:0"><label class="form-label">App role</label><select id="mf-role">
           <option value="paddler" ${m?.role==='paddler'?'selected':''}>Paddler</option>
           <option value="coach"   ${m?.role==='coach'?'selected':''}>Coach</option>
           <option value="admin"   ${m?.role==='admin'?'selected':''}>Admin</option>
         </select></div>
-        <div class="form-group" style="margin:0"><label class="form-label">Paddle side</label><select id="mf-side">
-          <option value=""      ${!m?.side?'selected':''}>—</option>
-          <option value="Left"  ${m?.side==='Left'?'selected':''}>Left</option>
-          <option value="Right" ${m?.side==='Right'?'selected':''}>Right</option>
-          <option value="N/A"   ${m?.side==='N/A'?'selected':''}>N/A</option>
-        </select></div>
-        <div class="form-group" style="margin:0"><label class="form-label">Position</label><select id="mf-pos">
-          <option ${m?.paddlerRole==='Paddler'?'selected':''}>Paddler</option>
-          <option ${m?.paddlerRole==='Drummer'?'selected':''}>Drummer</option>
-          <option ${m?.paddlerRole==='Steers'?'selected':''}>Steers</option>
-        </select></div>
+        <div class="form-group" style="margin:0"><label class="form-label">Weight (lbs)</label><input id="mf-weight" type="number" value="${esc(m?.weight||'')}" placeholder="150"></div>
       </div>
-      <div class="form-grid-2" style="margin-bottom:0">
-        <div class="form-group" style="margin:0"><label class="form-label">Weight (kg)</label><input id="mf-weight" type="number" value="${esc(m?.weight||'')}" placeholder="70"></div>
-        <div class="form-group" style="margin:0"><label class="form-label">Emergency contact</label><input id="mf-emerg" value="${esc(m?.emergency||'')}" placeholder="Name · Phone"></div>
+      <div class="form-grid-2" style="margin-bottom:14px">
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Paddle sides</label>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:8px 0">
+            ${['Left','Right','Both'].map(s=>{const checked=(Array.isArray(m?.sides)?m.sides:m?.side?[m.side]:[]).includes(s);return `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="mf-side-${s.toLowerCase()}" ${checked?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${s}</label>`;}).join('')}
+          </div>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Boat positions</label>
+          <div style="display:flex;flex-direction:column;gap:6px;padding:8px 0">
+            ${['Paddler','Drummer','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddlerRoles)?m.paddlerRoles:m?.paddlerRole?[m.paddlerRole]:['Paddler']).includes(pos);return `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="mf-pos-${pos.toLowerCase()}" ${checked?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`;}).join('')}
+          </div>
+        </div>
       </div>
+      <div class="form-group"><label class="form-label">Emergency contact</label><input id="mf-emerg" value="${esc(m?.emergency||'')}" placeholder="Name · Phone"></div>
     </div>
     <div class="modal-footer">
       <button class="btn" onclick="closeModal()">Cancel</button>
@@ -671,11 +672,11 @@ function openMemberModal(mJson) {
 window.saveMember = async (uidArg, isNew) => {
   if (!can.admin()) return;
   const updates = {
-    role:        document.getElementById('mf-role').value,
-    side:        document.getElementById('mf-side').value,
-    paddlerRole: document.getElementById('mf-pos').value,
-    weight:      document.getElementById('mf-weight').value,
-    emergency:   document.getElementById('mf-emerg').value.trim(),
+    role:         document.getElementById('mf-role').value,
+    sides:        ['Left','Right','Both'].filter(s=>document.getElementById('mf-side-'+s.toLowerCase())?.checked),
+    paddlerRoles: ['Paddler','Drummer','Steers'].filter(p=>document.getElementById('mf-pos-'+p.toLowerCase())?.checked),
+    weight:       document.getElementById('mf-weight').value,
+    emergency:    document.getElementById('mf-emerg').value.trim(),
   };
   if (isNew) {
     const first=document.getElementById('mf-first').value.trim(),
@@ -736,7 +737,7 @@ function drawBoat(evId, lineup, members) {
     const click = ed ? `onclick="pickSeat('${evId}','${key}')"` : '';
     const rm = ed && mem ? `<button class="rm-seat" onclick="event.stopPropagation();clrSeat('${evId}','${key}')">✕</button>` : '';
     return `<div class="${cls}" ${click}>${mem
-      ? `<div class="avatar" style="width:26px;height:26px;font-size:10px">${initials(mem.name)}</div><div><div class="seat-name">${esc(mem.name)}</div><div class="seat-sub">${esc(mem.side||'')}</div></div>${rm}`
+      ? `<div class="avatar" style="width:26px;height:26px;font-size:10px">${initials(mem.name)}</div><div><div class="seat-name">${esc(mem.name)}</div><div class="seat-sub">${esc((Array.isArray(mem.sides)?mem.sides:mem.side?[mem.side]:[]).join('/'))}</div></div>${rm}`
       : `<span class="seat-empty">${ed?'+ assign':''}</span>`}</div>`;
   }
 
@@ -745,7 +746,7 @@ function drawBoat(evId, lineup, members) {
     const click = ed ? `onclick="pickSeat('${evId}','${key}')"` : '';
     return `<div class="${cls}" ${click} style="max-width:300px">
       ${mem
-        ? `<div class="avatar">${initials(mem.name)}</div><div style="flex:1"><div style="font-weight:700;font-size:14px">${esc(mem.name)}</div><div style="font-size:12px;color:var(--text-3)">${esc(mem.paddlerRole||'')} · ${esc(mem.side||'')}</div></div>
+        ? `<div class="avatar">${initials(mem.name)}</div><div style="flex:1"><div style="font-weight:700;font-size:14px">${esc(mem.name)}</div><div style="font-size:12px;color:var(--text-3)">${esc((Array.isArray(mem.paddlerRoles)?mem.paddlerRoles:mem.paddlerRole?[mem.paddlerRole]:['Paddler']).join(', '))} · ${esc((Array.isArray(mem.sides)?mem.sides:mem.side?[mem.side]:[]).join('/'))||'—'}</div></div>
            ${ed?`<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();clrSeat('${evId}','${key}')">✕</button>`:''}`
         : `<span style="color:var(--text-3);font-size:13px;font-style:italic">${ed?`+ assign ${label}`:label+' not assigned'}</span>`}
     </div>`;
@@ -813,8 +814,8 @@ window.pickSeat = function(evId, key) {
           <div id="seat-list">
             ${avail.length ? avail.map(m=>`<div class="rsvp-row" style="cursor:pointer" onclick="assignSeat('${evId}','${key}','${m.uid}')">
               <div class="avatar">${initials(m.name)}</div>
-              <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc(m.paddlerRole||'Paddler')} · ${esc(m.side||'—')} side · ${m.weight?m.weight+' kg':'?'}</div></div>
-              ${m.side&&key.includes(m.side.toLowerCase())?'<span class="badge badge-yes">✓ side match</span>':''}
+              <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler']).join(', '))} · ${esc((Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).join('/'))||'—'} side · ${m.weight?m.weight+' lbs':'?'}</div></div>
+              ${(Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).some(s=>key.includes(s.toLowerCase()))?'<span class="badge badge-yes">✓ side match</span>':''}
             </div>`).join('') : '<p style="color:var(--text-3);font-size:13px;padding:8px 0">All members assigned.</p>'}
           </div>
           ${lineup[key]?`<hr><button class="btn btn-danger btn-sm" onclick="clrSeat('${evId}','${key}');closeModal()">Remove current assignment</button>`:''}
@@ -926,7 +927,7 @@ window.openRsvpModal = function(evId) {
       <div class="modal-body">
         ${members.map(m=>{const cur=rsvps[m.uid]||''; return `<div class="rsvp-row">
           <div class="avatar">${initials(m.name)}</div>
-          <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc(m.paddlerRole||'Paddler')} · ${esc(m.side||'—')}</div></div>
+          <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler']).join(', '))} · ${esc((Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).join('/'))||'—'}</div></div>
           ${ed?`<div class="rsvp-btns">
             <button class="rsvp-btn ${cur==='yes'?'going':''}" onclick="setRsvp('${m.uid}','yes',this)">✓ Going</button>
             <button class="rsvp-btn ${cur==='no'?'notgoing':''}" onclick="setRsvp('${m.uid}','no',this)">✗ No</button>
@@ -973,7 +974,7 @@ function pgAttendance() {
         return `<td style="text-align:center">${r==='yes'?'<span style="color:var(--success);font-size:16px">✓</span>':r==='no'?'<span style="color:var(--danger);font-size:16px">✗</span>':'<span style="color:var(--border-strong)">—</span>'}</td>`;
       }).join('');
       const pct=pt>0?Math.round(att/pt*100):null;
-      return `<tr><td><div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc(m.paddlerRole||'Paddler')}</div></div></div></td>${cells}<td style="text-align:center">${pct!==null?`<span class="pct-chip" style="background:${pctBg(pct)};color:${pctColor(pct)}">${pct}%</span>`:'—'}</td></tr>`;
+      return `<tr><td><div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler']).join(', '))}</div></div></div></td>${cells}<td style="text-align:center">${pct!==null?`<span class="pct-chip" style="background:${pctBg(pct)};color:${pctColor(pct)}">${pct}%</span>`:'—'}</td></tr>`;
     }).join('');
     C.innerHTML=`<div class="table-wrap"><table><thead><tr><th style="min-width:150px">Member</th>${headCols}<th style="text-align:center">Overall</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   });
