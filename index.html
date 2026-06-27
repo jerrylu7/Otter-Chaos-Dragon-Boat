@@ -1847,10 +1847,23 @@ function pgProfile() {
             </div>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;font-size:14px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;font-size:14px;margin-bottom:12px">
           <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Email</div><div>${esc(p.email)}</div></div>
           <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Weight</div><div>${p.weight?p.weight+' lbs':'—'}</div></div>
           <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Emergency</div><div style="font-size:13px">${esc(p.emergency||'—')}</div></div>
+        </div>
+        <!-- App role info box -->
+        <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:flex-start;gap:10px">
+          <div style="flex:1">
+            <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">App role</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">${roleBadge(p.role)}<span style="font-size:13px;color:var(--text-2)">${
+              p.role==='admin'  ? 'Full access — manage members, events, lineups, settings' :
+              p.role==='coach'  ? 'Can edit events, manage lineups and RSVPs' :
+              p.role==='tester' ? 'Read-only access to all management views' :
+                                  'Can RSVP to events and view the roster and lineup'
+            }</span></div>
+            <div style="font-size:12px;color:var(--text-3)">🔒 App roles are assigned by an admin. Contact your team admin to request a role change.</div>
+          </div>
         </div>
       </div>
 
@@ -2593,7 +2606,18 @@ function pgApprovals() {
     const all      = Object.values(snap.val()||{});
     const pending  = all.filter(u=>!u.approved);
     const approved = all.filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
-    C.innerHTML =
+
+    // Role legend
+    const roleLegend = `<div class="card" style="padding:16px 20px;margin-bottom:20px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px">App roles — only admins can assign these</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;font-size:13px">
+        <div style="display:flex;gap:8px;align-items:flex-start"><div style="padding-top:1px">${roleBadge('admin')}</div><div style="color:var(--text-2)">Full access — manage members, events, lineups, settings</div></div>
+        <div style="display:flex;gap:8px;align-items:flex-start"><div style="padding-top:1px">${roleBadge('coach')}</div><div style="color:var(--text-2)">Can edit events, lineups and RSVPs</div></div>
+        <div style="display:flex;gap:8px;align-items:flex-start"><div style="padding-top:1px">${roleBadge('tester')}</div><div style="color:var(--text-2)">Read-only view of all management sections</div></div>
+        <div style="display:flex;gap:8px;align-items:flex-start"><div style="padding-top:1px">${roleBadge('paddler')}</div><div style="color:var(--text-2)">RSVP to events, view roster and lineup</div></div>
+      </div>
+    </div>`;
+    C.innerHTML = roleLegend +
       (pending.length
         ? `<div class="section-label" style="color:var(--danger-text)">⏳ Pending (${pending.length})</div>
            <div class="table-wrap" style="margin-bottom:24px"><table>
