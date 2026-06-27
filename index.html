@@ -374,6 +374,34 @@ tbody tr:hover td { background: var(--surface-alt); }
 .empty-title { font-size: 16px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; }
 
 /* ── Dashboard ── */
+/* ── Monthly calendar ── */
+.dash-calendar { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 24px; overflow: hidden; }
+.cal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); background: var(--surface-alt); }
+.cal-title { font-size: 16px; font-weight: 700; letter-spacing: -0.2px; }
+.cal-nav { display: flex; gap: 6px; }
+.cal-nav-btn { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface); cursor: pointer; font-size: 14px; color: var(--text-2); display: flex; align-items: center; justify-content: center; font-family: inherit; transition: all 0.1s; }
+.cal-nav-btn:hover { background: var(--accent-bg); color: var(--accent-text); border-color: var(--accent); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+.cal-dow { padding: 8px 4px; text-align: center; font-size: 11px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+.cal-day { min-height: 72px; padding: 6px 4px 4px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); vertical-align: top; position: relative; cursor: default; transition: background 0.1s; }
+.cal-day:nth-child(7n) { border-right: none; }
+.cal-day.other-month { background: var(--surface-alt); }
+.cal-day.today .cal-day-num { background: var(--accent); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; margin: 0 auto 2px; }
+.cal-day.has-event { cursor: pointer; }
+.cal-day.has-event:hover { background: var(--accent-bg); }
+.cal-day-num { font-size: 12px; font-weight: 600; color: var(--text-2); text-align: center; margin-bottom: 3px; line-height: 22px; }
+.cal-day.other-month .cal-day-num { color: var(--text-3); }
+.cal-event-dot { display: flex; align-items: center; gap: 3px; padding: 1px 4px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-bottom: 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; line-height: 1.5; }
+.cal-event-dot.practice { background: var(--accent-bg); color: var(--accent-text); }
+.cal-event-dot.race { background: var(--race-bg); color: var(--race-text); }
+.cal-event-dot.rsvp-yes { opacity: 1; }
+.cal-event-dot.rsvp-no { opacity: 0.45; }
+.cal-event-dot.rsvp-pending { border: 1px dashed currentColor; }
+.cal-more { font-size: 10px; color: var(--text-3); text-align: center; margin-top: 1px; }
+.cal-legend { display: flex; gap: 14px; padding: 10px 18px; border-top: 1px solid var(--border); background: var(--surface-alt); flex-wrap: wrap; }
+.cal-legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); }
+.cal-legend-swatch { width: 10px; height: 10px; border-radius: 2px; }
+
 .dash-welcome { margin-bottom: 24px; }
 .dash-welcome .greeting { font-size: 24px; font-weight: 800; letter-spacing: -0.4px; }
 .dash-welcome .sub { font-size: 14px; color: var(--text-3); margin-top: 4px; }
@@ -929,7 +957,6 @@ function pgDashboard() {
   const uid = currentUser.uid;
   const p   = currentProfile;
 
-  // Load events + lineups in parallel
   Promise.all([
     db.ref('events').orderByChild('date').get(),
     db.ref('lineups').get(),
@@ -937,39 +964,28 @@ function pgDashboard() {
     const allEvents = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
     const lineups   = lineupSnap.val()||{};
     const now = today();
-    const oneWeekOut = new Date(); oneWeekOut.setDate(oneWeekOut.getDate() + 7);
-    const weekStr = oneWeekOut.toISOString().slice(0,10);
-
-    const upcoming = allEvents.filter(e => e.date >= now && e.date <= weekStr);
-    const allUpcoming = allEvents.filter(e => e.date >= now); // for stats
-    const past     = allEvents.filter(e => e.date <  now);
-
-    // Stats
-    const totalPast    = past.length;
-    const attendedPast = past.filter(e => (e.rsvps||{})[uid]==='yes').length;
+    const allUpcoming = allEvents.filter(e => e.date >= now);
+    const past        = allEvents.filter(e => e.date <  now);
     const pendingCount = allUpcoming.filter(e => !(e.rsvps||{})[uid]).length;
-    const attPct       = totalPast ? Math.round(attendedPast/totalPast*100) : null;
+    const attendedPast = past.filter(e => (e.rsvps||{})[uid]==='yes').length;
+    const attPct = past.length ? Math.round(attendedPast/past.length*100) : null;
 
-    // Greeting
     const hour = new Date().getHours();
     const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-    // Find my seat for each event
     function mySeat(evId) {
-      const ev_lineup = lineups[evId]||{};
-      for (const [k,v] of Object.entries(ev_lineup)) {
-        if (v === uid) return k.replace(/_/g,' ');
-      }
+      const lup = lineups[evId]||{};
+      for (const [k,v] of Object.entries(lup)) { if (v===uid) return k.replace(/_/g,' '); }
       return null;
     }
 
-    // Build HTML
     let html = `
       <div class="dash-welcome">
-        <div class="greeting">${greet}, ${esc(p.first || p.name.split(' ')[0])} 👋</div>
-        <div class="sub">${pendingCount > 0 ? `You have <strong>${pendingCount}</strong> event${pendingCount!==1?'s':''} awaiting your RSVP.` : 'You\'re all caught up — no pending RSVPs!'}</div>
+        <div class="greeting">${greet}, ${esc(p.first||p.name.split(' ')[0])} 👋</div>
+        <div class="sub">${pendingCount > 0
+          ? `You have <strong>${pendingCount}</strong> event${pendingCount!==1?'s':''} awaiting your RSVP.`
+          : "You're all caught up — no pending RSVPs!"}</div>
       </div>
-
       <div class="dash-stats">
         <div class="dash-stat">
           <div class="dash-stat-val" style="color:var(--accent)">${allUpcoming.length}</div>
@@ -987,58 +1003,13 @@ function pgDashboard() {
           <div class="dash-stat-val" style="color:${attPct===null?'var(--text-3)':attPct>=80?'var(--success)':attPct>=50?'var(--warning)':'var(--danger)'}">${attPct!==null?attPct+'%':'—'}</div>
           <div class="dash-stat-label">Att. rate</div>
         </div>
-      </div>`;
+      </div>
+      <div id="cal-container"></div>
+      <div class="dash-section-title" style="margin-top:24px" id="pending-section-title"></div>
+      <div id="dash-event-list"></div>`;
 
-    // ── Upcoming events ──
-    html += `<div class="dash-section-title">This week's events</div>`;
-    if (!upcoming.length) {
-      html += `<div class="card" style="padding:0"><div class="dash-empty">No events in the next 7 days.<br><span style="font-size:13px">Check <a href="#" onclick="navigate('practices');return false" style="color:var(--accent)">Practices</a> or <a href="#" onclick="navigate('races');return false" style="color:var(--accent)">Races</a> for the full schedule.</span></div></div>`;
-    } else {
-      html += upcoming.map(ev => {
-        const rsvp = (ev.rsvps||{})[uid] || '';
-        const seat = mySeat(ev.id);
-        const statusClass = rsvp==='yes' ? 'rsvp-yes' : rsvp==='no' ? 'rsvp-no' : 'rsvp-pending';
-        const isRace = ev.type === 'Race';
-
-        const statusPill = rsvp==='yes'
-          ? `<span class="rsvp-status-pill yes">✓ Going</span>`
-          : rsvp==='no'
-          ? `<span class="rsvp-status-pill no">✗ Not going</span>`
-          : `<span class="rsvp-status-pill pending">⏳ No reply</span>`;
-
-        const seatInfo = seat
-          ? `<div class="dash-my-seat">🚣 Your seat: <strong>${esc(seat)}</strong></div>`
-          : '';
-
-        const daysUntil = Math.round((new Date(ev.date+'T12:00:00') - new Date()) / 86400000);
-        const daysLabel = daysUntil===0 ? '🔴 Today!' : daysUntil===1 ? '🟡 Tomorrow' : `${daysUntil}d away`;
-
-        return `<div class="event-rsvp-card ${statusClass} clickable" id="ecard-${ev.id}" onclick="openEventDetail('${ev.id}',event)">
-          <div class="event-rsvp-icon" style="background:${isRace?'var(--race-bg)':'var(--accent-bg)'}">${isRace?'🏁':'🚣'}</div>
-          <div class="event-rsvp-info">
-            <div class="event-rsvp-name">${esc(ev.name)} <span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></div>
-            <div class="event-rsvp-meta">
-              <span>📅 ${fmtDate(ev.date)}</span>
-              ${ev.time?`<span>🕐 ${fmtTime(ev.time)}</span>`:''}
-              ${ev.location?`<span>📍 ${esc(ev.location)}</span>`:''}
-              <span style="font-weight:700;color:${daysUntil<=1?'var(--danger)':daysUntil<=7?'var(--warning)':'var(--text-3)'}">${daysLabel}</span>
-            </div>
-            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              ${statusPill}
-              ${seatInfo}
-            </div>
-          </div>
-          <div class="rsvp-action-btns" onclick="event.stopPropagation()">
-            <button class="rsvp-action-btn ${rsvp==='yes'?'selected-yes':''}" onclick="dashRsvp('${ev.id}','yes',this)" title="Going">✓ Going</button>
-            <button class="rsvp-action-btn ${rsvp==='no'?'selected-no':''}" onclick="dashRsvp('${ev.id}','no',this)" title="Not going">✗ No</button>
-          </div>
-        </div>`;
-      }).join('');
-    }
-
-    // ── Past events ──
     if (past.length) {
-      const recentPast = [...past].reverse().slice(0, 8);
+      const recent = [...past].reverse().slice(0,8);
       html += `<div class="dash-section-title" style="margin-top:28px">Recent history</div>
         <div class="past-events-table">
           <table style="width:100%;border-collapse:collapse;font-size:14px">
@@ -1046,37 +1017,136 @@ function pgDashboard() {
               <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Event</th>
               <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Date</th>
               <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Status</th>
-              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">My seat</th>
+              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Seat</th>
             </tr></thead>
-            <tbody>
-              ${recentPast.map(ev => {
-                const rsvp = (ev.rsvps||{})[uid];
-                const seat = mySeat(ev.id);
-                const pill = rsvp==='yes'
-                  ? `<span class="rsvp-status-pill yes">✓ Went</span>`
-                  : rsvp==='no'
-                  ? `<span class="rsvp-status-pill no">✗ Absent</span>`
-                  : `<span class="rsvp-status-pill pending">— No reply</span>`;
-                return `<tr style="border-bottom:1px solid var(--border)">
-                  <td style="padding:11px 16px">
-                    <div style="font-weight:600">${esc(ev.name)}</div>
-                    <span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px;margin-top:2px">${ev.type}</span>
-                  </td>
-                  <td style="padding:11px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td>
-                  <td style="padding:11px 16px;text-align:center">${pill}</td>
-                  <td style="padding:11px 16px;text-align:center;font-size:13px;color:var(--text-2)">${seat?'🚣 '+esc(seat):'—'}</td>
-                </tr>`;
-              }).join('')}
-            </tbody>
+            <tbody>${recent.map(ev=>{
+              const rsvp=(ev.rsvps||{})[uid];
+              const seat=mySeat(ev.id);
+              const pill=rsvp==='yes'?'<span class="rsvp-status-pill yes">\u2713 Went</span>':rsvp==='no'?'<span class="rsvp-status-pill no">\u2717 Absent</span>':'<span class="rsvp-status-pill pending">— No reply</span>';
+              return `<tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:11px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></td>
+                <td style="padding:11px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td>
+                <td style="padding:11px 16px;text-align:center">${pill}</td>
+                <td style="padding:11px 16px;text-align:center;font-size:13px;color:var(--text-2)">${seat?'🚣 '+esc(seat):'—'}</td>
+              </tr>`;
+            }).join('')}</tbody>
           </table>
         </div>`;
     }
 
     C.innerHTML = html;
+    window._dashAllEvents = allEvents;
+    window._dashUid = uid;
+    window._dashMySeat = mySeat;
+    const n = new Date();
+    renderDashCalendar(n.getFullYear(), n.getMonth(), allEvents, uid);
+    renderDashEventList(allEvents, uid, mySeat);
   });
 }
 
-// ── Event detail modal (RSVP + Lineup tabs) ────────────────────────────────────
+function renderDashCalendar(year, month, allEvents, uid) {
+  const container = document.getElementById('cal-container'); if(!container) return;
+  const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const firstDay = new Date(year, month, 1);
+  const lastDay  = new Date(year, month+1, 0);
+  const startDow = firstDay.getDay();
+  const totalCells = Math.ceil((startDow + lastDay.getDate()) / 7) * 7;
+  const todayStr = today();
+  const eventsByDate = {};
+  allEvents.forEach(ev => { if(!eventsByDate[ev.date]) eventsByDate[ev.date]=[]; eventsByDate[ev.date].push(ev); });
+  let cellsHtml = '';
+  for (let i=0; i<totalCells; i++) {
+    const cellDate = new Date(year, month, i - startDow + 1);
+    const dateStr  = cellDate.toISOString().slice(0,10);
+    const isCur    = cellDate.getMonth()===month;
+    const isToday  = dateStr===todayStr;
+    const dayEvs   = eventsByDate[dateStr]||[];
+    const hasEv    = dayEvs.length>0;
+    const dots = isCur ? dayEvs.slice(0,2).map(ev=>{
+      const rsvp=(ev.rsvps||{})[uid]||'';
+      const rc=rsvp==='yes'?'rsvp-yes':rsvp==='no'?'rsvp-no':'rsvp-pending';
+      return `<div class="cal-event-dot ${ev.type.toLowerCase()} ${rc}" onclick="event.stopPropagation();openEventDetail('${ev.id}',event)" title="${esc(ev.name)}">${ev.type==='Race'?'🏁':'🚣'} ${esc(ev.name.length>10?ev.name.slice(0,10)+'…':ev.name)}</div>`;
+    }).join('')+(dayEvs.length>2?`<div class="cal-more">+${dayEvs.length-2} more</div>`:'') : '';
+    cellsHtml += `<div class="cal-day${isCur?'':' other-month'}${isToday?' today':''}${hasEv?' has-event':''}" ${hasEv&&isCur?`onclick="calDayClick('${dateStr}')"`:''}>${isToday?'<div class="cal-day-num">'+cellDate.getDate()+'</div>':'<div class="cal-day-num">'+cellDate.getDate()+'</div>'}${dots}</div>`;
+  }
+  container.innerHTML = `<div class="dash-calendar">
+    <div class="cal-header">
+      <div class="cal-title">${MONTHS[month]} ${year}</div>
+      <div class="cal-nav">
+        <button class="cal-nav-btn" onclick="dashCalNav(${year},${month},-1)">‹</button>
+        <button class="cal-nav-btn" onclick="dashCalNav(${year},${month},0)" title="Today">●</button>
+        <button class="cal-nav-btn" onclick="dashCalNav(${year},${month},1)">›</button>
+      </div>
+    </div>
+    <div class="cal-grid">
+      ${DAYS.map(d=>`<div class="cal-dow">${d}</div>`).join('')}
+      ${cellsHtml}
+    </div>
+    <div class="cal-legend">
+      <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:var(--accent-bg);border:1px solid var(--accent-text)"></div> Practice</div>
+      <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:var(--race-bg);border:1px solid var(--race-text)"></div> Race</div>
+      <div class="cal-legend-item"><span style="font-size:10px;border:1px dashed var(--text-3);border-radius:3px;padding:0 4px;color:var(--text-3)">dashed</span> No reply</div>
+      <div class="cal-legend-item"><span style="opacity:.4;font-size:12px;color:var(--text-2)">faded</span> Not going</div>
+    </div>
+  </div>`;
+}
+
+window.dashCalNav = function(year, month, dir) {
+  const evs=window._dashAllEvents||[], uid=window._dashUid;
+  if (dir===0) { const n=new Date(); renderDashCalendar(n.getFullYear(),n.getMonth(),evs,uid); }
+  else { let m=month+dir,y=year; if(m<0){m=11;y--;} if(m>11){m=0;y++;} renderDashCalendar(y,m,evs,uid); }
+};
+
+window.calDayClick = function(dateStr) {
+  const evs=(window._dashAllEvents||[]).filter(e=>e.date===dateStr);
+  if(evs.length===1){ openEventDetail(evs[0].id,null); return; }
+  if(evs.length>1)   openEventDetail(evs[0].id,null);
+};
+
+function renderDashEventList(allEvents, uid, mySeat) {
+  const listEl=document.getElementById('dash-event-list'); if(!listEl) return;
+  const now=today();
+  const oneWeekOut=new Date(); oneWeekOut.setDate(oneWeekOut.getDate()+7);
+  const weekStr=oneWeekOut.toISOString().slice(0,10);
+  const pending  = allEvents.filter(e=>e.date>=now && !(e.rsvps||{})[uid]);
+  const thisWeek = allEvents.filter(e=>e.date>=now && e.date<=weekStr && (e.rsvps||{})[uid]);
+  const toShow   = [...pending,...thisWeek].sort((a,b)=>a.date.localeCompare(b.date));
+  const titleEl  = document.getElementById('pending-section-title');
+  if(titleEl) titleEl.textContent = pending.length>0 ? `Needs your reply (${pending.length})` : "This week's events";
+  if(!toShow.length){
+    listEl.innerHTML=`<div class="card" style="padding:0"><div class="dash-empty">No events need a reply right now.<br><span style="font-size:13px">Check <a href="#" onclick="navigate('practices');return false" style="color:var(--accent)">Practices</a> or <a href="#" onclick="navigate('races');return false" style="color:var(--accent)">Races</a> for the full schedule.</span></div></div>`;
+    return;
+  }
+  listEl.innerHTML = toShow.map(ev=>{
+    const rsvp=(ev.rsvps||{})[uid]||'';
+    const seat=mySeat?mySeat(ev.id):null;
+    const sc=rsvp==='yes'?'rsvp-yes':rsvp==='no'?'rsvp-no':'rsvp-pending';
+    const isRace=ev.type==='Race';
+    const pill=rsvp==='yes'?'<span class="rsvp-status-pill yes">\u2713 Going</span>':rsvp==='no'?'<span class="rsvp-status-pill no">\u2717 Not going</span>':'<span class="rsvp-status-pill pending">\u23f3 No reply</span>';
+    const si=seat?`<div class="dash-my-seat">🚣 Your seat: <strong>${esc(seat)}</strong></div>`:'';
+    const du=Math.round((new Date(ev.date+'T12:00:00')-new Date())/86400000);
+    const dl=du===0?'🔴 Today!':du===1?'🟡 Tomorrow':`${du}d away`;
+    return `<div class="event-rsvp-card ${sc} clickable" id="ecard-${ev.id}" onclick="openEventDetail('${ev.id}',event)">
+      <div class="event-rsvp-icon" style="background:${isRace?'var(--race-bg)':'var(--accent-bg)'}">${isRace?'🏁':'🚣'}</div>
+      <div class="event-rsvp-info">
+        <div class="event-rsvp-name">${esc(ev.name)} <span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></div>
+        <div class="event-rsvp-meta">
+          <span>📅 ${fmtDate(ev.date)}</span>
+          ${ev.time?`<span>🕐 ${fmtTime(ev.time)}</span>`:''}
+          ${ev.location?`<span>📍 ${esc(ev.location)}</span>`:''}
+          <span style="font-weight:700;color:${du<=1?'var(--danger)':du<=7?'var(--warning)':'var(--text-3)'}">${dl}</span>
+        </div>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${pill} ${si}</div>
+      </div>
+      <div class="rsvp-action-btns" onclick="event.stopPropagation()">
+        <button class="rsvp-action-btn ${rsvp==='yes'?'selected-yes':''}" onclick="dashRsvp('${ev.id}','yes',this)">✓ Going</button>
+        <button class="rsvp-action-btn ${rsvp==='no'?'selected-no':''}" onclick="dashRsvp('${ev.id}','no',this)">✗ No</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 window.openEventDetail = function(evId, domEvent) {
   // Don't open if user clicked the RSVP buttons
   if (domEvent && domEvent.target.closest('.rsvp-action-btns')) return;
