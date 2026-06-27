@@ -455,8 +455,8 @@ tbody tr:hover td { background: var(--surface-alt); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-full { min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: var(--text-3); font-size: 14px; }
 
-.mobile-topbar { display: none; background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 16px; align-items: center; gap: 12px; position: sticky; top: 0; z-index: 60; }
-.hamburger { background: none; border: none; cursor: pointer; font-size: 22px; color: var(--text); padding: 4px; }
+.mobile-topbar { display: none; background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 14px; align-items: center; gap: 10px; position: sticky; top: 0; z-index: 60; min-height: 54px; }
+.hamburger { background: none; border: none; cursor: pointer; font-size: 22px; color: var(--text); padding: 6px; min-width: 40px; min-height: 40px; display: flex; align-items: center; justify-content: center; }
 .mob-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 45; }
 .mob-overlay.open { display: block; }
 .sidebar.mob-open { transform: translateX(0) !important; width: 224px !important; }
@@ -471,17 +471,167 @@ tbody tr:hover td { background: var(--surface-alt); }
 hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
 
+/* ── Mobile — base breakpoint ── */
 @media (max-width: 768px) {
+  /* Sidebar */
   .sidebar { transform: translateX(-100%); transition: transform 0.25s ease, width 0.22s; width: 224px !important; }
   .main { margin-left: 0 !important; }
   .mobile-topbar { display: flex; }
   .topbar { display: none; }
-  .content { padding: 16px; }
-  .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
-  .metric-grid { grid-template-columns: repeat(2, 1fr); }
-  .event-card { flex-wrap: wrap; }
-  .auth-card { padding: 24px 20px; }
   .sb-toggle { display: none; }
+
+  /* Content */
+  .content { padding: 12px 14px; }
+
+  /* Auth */
+  .auth-card { padding: 24px 18px; }
+  .auth-logo .dragon { font-size: 36px; }
+  .auth-logo .app-name { font-size: 20px; }
+
+  /* Forms */
+  .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+
+  /* Stats */
+  .metric-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
+  .dash-stats { grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 16px; }
+  .dash-stat-val { font-size: 22px; }
+
+  /* Greeting */
+  .dash-welcome .greeting { font-size: 20px; }
+  .dash-welcome { margin-bottom: 16px; }
+
+  /* Calendar */
+  .cal-day { min-height: 52px; padding: 4px 2px 2px; }
+  .cal-day-num { font-size: 11px; }
+  .cal-event-dot { font-size: 9px; padding: 1px 3px; }
+  .cal-dow { font-size: 9px; padding: 6px 2px; }
+  .cal-header { padding: 10px 14px; }
+  .cal-title { font-size: 14px; }
+  .cal-legend { gap: 8px; padding: 8px 14px; flex-wrap: wrap; }
+  .cal-legend-item { font-size: 11px; }
+
+  /* Event cards — stack vertically */
+  .event-rsvp-card { flex-direction: column; align-items: stretch; gap: 10px; padding: 14px; }
+  .event-rsvp-info { width: 100%; }
+  .event-rsvp-name { font-size: 14px; }
+  .event-rsvp-meta { flex-wrap: wrap; gap: 6px; font-size: 12px; }
+  .rsvp-action-btns { width: 100%; display: flex; gap: 8px; }
+  .rsvp-action-btn { flex: 1; justify-content: center; padding: 12px 8px; font-size: 15px; border-radius: 8px; min-height: 44px; }
+  .event-rsvp-icon { display: none; }
+
+  /* Section labels */
+  .dash-section-title { font-size: 10px; margin: 16px 0 8px; }
+  .section-label { font-size: 10px; margin: 16px 0 8px; }
+
+  /* Tables — horizontal scroll */
+  .table-wrap { border-radius: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { font-size: 13px; min-width: 480px; }
+  th, td { padding: 10px 12px; }
+
+  /* Past events table on dashboard */
+  .past-events-table { border-radius: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .past-events-table table { min-width: 380px; }
+
+  /* Member cells */
+  .member-cell { gap: 8px; }
+  .avatar { width: 30px; height: 30px; font-size: 11px; }
+  .mname { font-size: 13px; }
+  .msub { font-size: 11px; }
+
+  /* Metrics */
+  .metric { padding: 12px; }
+  .metric-value { font-size: 22px; }
+  .metric-label { font-size: 10px; }
+
+  /* Boat seat grid */
+  .seat-grid { grid-template-columns: 1fr 24px 1fr; gap: 5px 3px; }
+  .seat-row-num { width: 22px; height: 22px; font-size: 10px; }
+  .seat-slot { min-height: 44px; padding: 6px 6px; font-size: 12px; border-radius: 6px; }
+  .seat-slot .seat-name { font-size: 11px; }
+  .seat-slot .seat-sub { font-size: 10px; }
+  .seat-col-label { font-size: 10px; }
+  .boat-visual { padding: 12px; }
+  .boat-section-title { font-size: 12px; margin-bottom: 8px; }
+
+  /* Modals — slide up from bottom on mobile */
+  .overlay { padding: 0; align-items: flex-end; background: rgba(0,0,0,0.6); }
+  .modal { border-radius: 20px 20px 0 0; max-height: 88vh; width: 100% !important; min-width: 0; }
+  .modal-header { padding: 16px 18px 12px; }
+  .modal-title { font-size: 15px; }
+  .modal-body { padding: 14px 18px; }
+  .modal-footer { padding: 12px 18px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+
+  /* RSVP rows in modal */
+  .rsvp-row { gap: 8px; padding: 12px 0; }
+  .rsvp-btns { gap: 5px; }
+  .rsvp-btn { padding: 8px 12px; font-size: 13px; min-height: 38px; }
+
+  /* Event detail tabs */
+  .ev-detail-tab { padding: 10px 14px; font-size: 13px; }
+  .ev-detail-tabs { margin: 0 -18px; padding: 0 18px; }
+
+  /* RSVP summary 3-col grid → 1 col */
+  #ev-detail-body > div[style*="grid-template-columns:repeat(3,1fr)"] { grid-template-columns: 1fr !important; gap: 8px; }
+
+  /* Profile stats grid → 1 col */
+  .dash-stats[style] { grid-template-columns: repeat(2,1fr) !important; }
+
+  /* Reminders */
+  .reminder-header { padding: 12px 14px; }
+  .reminder-tabs { padding: 10px 14px; gap: 4px; }
+  .reminder-body { padding: 12px 14px; }
+  .email-preview { font-size: 12px; padding: 10px 12px; max-height: 160px; }
+  .rtab { padding: 6px 12px; font-size: 12px; }
+
+  /* Recipient chips */
+  .recipient-chip { font-size: 11px; padding: 2px 8px; }
+
+  /* Attendance table */
+  .att-bar { width: 48px; }
+  .pct-chip { min-width: 36px; font-size: 11px; }
+
+  /* Buttons */
+  .btn { min-height: 40px; }
+  .btn-sm { min-height: 36px; padding: 6px 12px; }
+
+  /* Nav item touch targets */
+  .nav-item { padding: 12px 14px; font-size: 15px; min-height: 48px; }
+  .nav-icon { font-size: 20px; }
+
+  /* Cards */
+  .card { border-radius: 10px; }
+
+  /* Toast */
+  .toast { bottom: 16px; right: 12px; left: 12px; border-radius: 10px; justify-content: center; }
+
+  /* Safe area insets for notched phones */
+  .sidebar { padding-bottom: env(safe-area-inset-bottom); }
+  .mobile-topbar { padding-top: max(10px, env(safe-area-inset-top)); }
+}
+
+/* ── Very small phones (iPhone SE, etc.) ── */
+@media (max-width: 390px) {
+  .content { padding: 10px 12px; }
+  .cal-day { min-height: 44px; }
+  .cal-event-dot { font-size: 8px; }
+  .cal-day-num { font-size: 10px; }
+  .dash-stats { grid-template-columns: repeat(2, 1fr); }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .auth-card { padding: 20px 14px; }
+  .rsvp-action-btn { font-size: 14px; padding: 11px 6px; }
+  table { font-size: 12px; }
+  th, td { padding: 8px 10px; }
+  .modal-body { padding: 12px 14px; }
+  .event-rsvp-name { font-size: 13px; }
+}
+
+/* ── Tablet ── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .content { padding: 20px 24px; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .cal-day { min-height: 64px; }
+  .cal-event-dot { font-size: 10px; }
+  .event-rsvp-card { flex-wrap: wrap; }
 }
 </style>
 </head>
@@ -558,8 +708,11 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
     </aside>
     <div class="main" id="main-content">
       <div class="mobile-topbar">
-        <button class="hamburger" onclick="openSidebar()">☰</button>
-        <span style="font-weight:800;font-size:15px" id="mob-team-name">🐉 Otter Chaos</span>
+        <button class="hamburger" onclick="openSidebar()" aria-label="Open menu" style="padding:6px;font-size:22px">☰</button>
+        <span style="font-weight:800;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mob-team-name">🐉 Otter Chaos</span>
+        <button onclick="navigate('dashboard')" style="background:none;border:none;cursor:pointer;padding:6px;font-size:20px;position:relative;color:var(--text)" aria-label="Dashboard">
+          🏠<span id="mob-rsvp-badge" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--warning)"></span>
+        </button>
       </div>
       <div class="topbar" id="topbar">
         <div>
@@ -874,10 +1027,11 @@ function buildSidebar() {
   // Live badges
   db.ref('events').on('value', snap => {
     const badge = document.getElementById('dash-badge');
-    if (!badge) return;
+    const mobBadge = document.getElementById('mob-rsvp-badge');
     const evs = Object.values(snap.val()||{});
     const pending = evs.filter(e => e.date >= today() && !(e.rsvps||{})[currentUser.uid]).length;
-    badge.textContent = pending; badge.style.display = pending ? 'inline-flex' : 'none';
+    if (badge) { badge.textContent = pending; badge.style.display = pending ? 'inline-flex' : 'none'; }
+    if (mobBadge) mobBadge.style.display = pending ? 'block' : 'none';
   });
   if (can.admin()) {
     db.ref('users').on('value', snap => {
