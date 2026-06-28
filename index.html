@@ -1342,16 +1342,21 @@ function pgDashboard() {
     renderDashEventList(allEvents, uid, mySeat);
   }).catch(err => {
     console.error('Dashboard load error:', err?.code, err?.message, err);
-    // Only show error UI if we've been waiting more than 3 seconds
-    // (avoids flashing error on brief network hiccups)
+    const friendlyMsg = err?.message?.includes('indexOn') || err?.message?.includes('Index')
+      ? "We're having an otter-ly hard time finding your events! Ask your admin to add <code>.indexOn: date</code> to the Firebase rules."
+      : err?.message?.includes('permission') || err?.message?.includes('Permission')
+      ? "You shall not pass — otter this world! Looks like a permissions issue. Check your Firebase rules."
+      : err?.message
+      ? "Some-otter problem occurred. Check your connection and try again."
+      : "Some-otter problem occurred. Check your connection and try again.";
     setTimeout(() => {
       const C2 = document.getElementById('pg-content');
       if (C2 && C2.querySelector('.spinner')) {
         C2.innerHTML = `<div class="card" style="padding:24px;text-align:center;max-width:360px;margin:40px auto">
-          <div style="font-size:28px;margin-bottom:10px">⚠️</div>
-          <div style="font-weight:700;margin-bottom:6px">Couldn't load dashboard</div>
-          <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">${err?.message||'Check your connection and try again.'}</div>
-          <button class="btn btn-primary" onclick="pgDashboard()">Retry</button>
+          <div style="font-size:36px;margin-bottom:10px">🦦</div>
+          <div style="font-weight:700;margin-bottom:6px">Otter chaos!</div>
+          <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">${friendlyMsg}</div>
+          <button class="btn btn-primary" onclick="pgDashboard()">Try otter-gain</button>
         </div>`;
       }
     }, 3000);
