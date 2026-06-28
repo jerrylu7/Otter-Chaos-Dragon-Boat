@@ -709,7 +709,11 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
     <div class="main" id="main-content">
       <div class="mobile-topbar">
         <button class="hamburger" onclick="openSidebar()" aria-label="Open menu" style="padding:6px;font-size:22px">☰</button>
-        <span style="font-weight:800;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mob-team-name">🐉 Otter Chaos</span>
+        <div style="display:flex;align-items:center;gap:8px;flex:1;overflow:hidden">
+          <img id="mob-logo-img" src="" alt="" style="display:none;height:28px;width:auto;max-width:80px;object-fit:contain;border-radius:4px;flex-shrink:0">
+          <span id="mob-logo-emoji" style="font-size:22px;line-height:1;flex-shrink:0">🐉</span>
+          <span style="font-weight:800;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="mob-team-name">Otter Chaos</span>
+        </div>
         <button onclick="navigate('dashboard')" style="background:none;border:none;cursor:pointer;padding:6px;font-size:20px;position:relative;color:var(--text)" aria-label="Dashboard">
           🏠<span id="mob-rsvp-badge" style="display:none;position:absolute;top:4px;right:4px;width:8px;height:8px;border-radius:50%;background:var(--warning)"></span>
         </button>
@@ -797,21 +801,28 @@ function initApp() {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 function applyLogo(url) {
-  const sbEl    = document.getElementById('sb-logo-el');
-  const sbEmoji = document.getElementById('sb-logo-emoji');
-  const authImg = document.getElementById('auth-logo-img');
-  const authEl  = document.getElementById('auth-logo-el');
+  const sbEl      = document.getElementById('sb-logo-el');
+  const sbEmoji   = document.getElementById('sb-logo-emoji');
+  const authImg   = document.getElementById('auth-logo-img');
+  const authEl    = document.getElementById('auth-logo-el');
   const authEmoji = document.getElementById('auth-logo-emoji');
+  const mobImg    = document.getElementById('mob-logo-img');
+  const mobEmoji  = document.getElementById('mob-logo-emoji');
+
   if (url) {
-    if (sbEl)    { sbEl.src = url; sbEl.style.display = 'block'; }
-    if (sbEmoji) sbEmoji.style.display = 'none';
-    if (authImg) { authImg.style.display = 'block'; authEl.src = url; }
+    if (sbEl)      { sbEl.src = url; sbEl.style.display = 'block'; }
+    if (sbEmoji)   sbEmoji.style.display = 'none';
+    if (authImg)   { authImg.style.display = 'block'; authEl.src = url; }
     if (authEmoji) authEmoji.style.display = 'none';
+    if (mobImg)    { mobImg.src = url; mobImg.style.display = 'block'; }
+    if (mobEmoji)  mobEmoji.style.display = 'none';
   } else {
-    if (sbEl)    sbEl.style.display = 'none';
-    if (sbEmoji) sbEmoji.style.display = '';
-    if (authImg) authImg.style.display = 'none';
+    if (sbEl)      sbEl.style.display = 'none';
+    if (sbEmoji)   sbEmoji.style.display = '';
+    if (authImg)   authImg.style.display = 'none';
     if (authEmoji) authEmoji.style.display = '';
+    if (mobImg)    mobImg.style.display = 'none';
+    if (mobEmoji)  mobEmoji.style.display = '';
   }
 }
 
@@ -822,6 +833,8 @@ function startAuth() {
     if (sv.teamName) {
       document.getElementById('auth-team-name').textContent = sv.teamName;
       document.getElementById('sb-team-name').textContent   = sv.teamName;
+      const mob = document.getElementById('mob-team-name');
+      if (mob) mob.textContent = sv.teamName.length>18 ? sv.teamName.slice(0,18)+'…' : sv.teamName;
     }
     if (sv.logoUrl) applyLogo(sv.logoUrl);
   }).catch(()=>{});
@@ -915,7 +928,7 @@ function bootApp() {
     document.getElementById('sb-team-name').textContent = n;
     document.getElementById('auth-team-name').textContent = n;
     const mob = document.getElementById('mob-team-name');
-    if (mob) mob.textContent = '🐉 ' + (n.length>16 ? n.slice(0,16)+'…' : n);
+    if (mob) mob.textContent = n.length>18 ? n.slice(0,18)+'…' : n;
   });
   db.ref('settings/logoUrl').on('value', s => {
     const url = s.val()||'';
