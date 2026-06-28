@@ -296,6 +296,7 @@ tbody tr:hover td { background: var(--surface-alt); }
 .badge-race     { background: var(--race-bg);   color: var(--race-text); }
 .badge-yes      { background: var(--success-bg); color: var(--success-text); }
 .badge-no       { background: var(--danger-bg);  color: var(--danger-text); }
+.badge-otter-social, .badge-otter { background: #fff3e0; color: #b45309; }
 
 .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-bg); color: var(--accent-text); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .member-cell { display: flex; align-items: center; gap: 10px; }
@@ -394,6 +395,8 @@ tbody tr:hover td { background: var(--surface-alt); }
 .cal-event-dot { display: flex; align-items: center; gap: 3px; padding: 1px 4px; border-radius: 4px; font-size: 10px; font-weight: 600; margin-bottom: 2px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; cursor: pointer; line-height: 1.5; }
 .cal-event-dot.practice { background: var(--accent-bg); color: var(--accent-text); }
 .cal-event-dot.race { background: var(--race-bg); color: var(--race-text); }
+.cal-event-dot.otter\ s\.o\.c\.i\.a\.l,
+.cal-event-dot.otter-social { background: #fff3e0; color: #b45309; }
 .cal-event-dot.rsvp-yes { opacity: 1; }
 .cal-event-dot.rsvp-no { opacity: 0.45; }
 .cal-event-dot.rsvp-pending { border: 1px dashed currentColor; }
@@ -751,6 +754,11 @@ const fmtTime  = t => { if(!t) return ''; const [h,m]=t.split(':').map(Number); 
 const pctColor = p => p===null?'var(--text-3)':p>=80?'var(--success)':p>=50?'var(--warning)':'var(--danger)';
 const pctBg    = p => p===null?'var(--border)':p>=80?'var(--success-bg)':p>=50?'var(--warning-bg)':'var(--danger-bg)';
 
+// Event type styling
+const evIcon = t => t==='Race'?'🏁':t==='Otter S.O.C.I.A.L'?'🦦':'🚣';
+const evBg   = t => t==='Race'?'var(--race-bg)':t==='Otter S.O.C.I.A.L'?'#fff3e0':'var(--accent-bg)';
+const evBadgeClass = t => t==='Race'?'badge-race':t==='Otter S.O.C.I.A.L'?'badge-otter':'badge-practice';
+
 function roleBadge(r) {
   const cls = {admin:'role-admin',coach:'role-coach',paddler:'role-paddler',tester:'role-tester'}[r]||'role-paddler';
   return `<span class="role-badge ${cls}">${r||'paddler'}</span>`;
@@ -999,6 +1007,7 @@ function buildSidebar() {
     { id:'dashboard', icon:'🏠', label:'Dashboard',  badge:'dash-badge' },
     { id:'races',     icon:'🏁', label:'Races' },
     { id:'practices', icon:'🚣', label:'Practices' },
+    { id:'socials',   icon:'🦦', label:'Otter S.O.C.I.A.L' },
     { id:'roster',    icon:'👥', label:'Roster' },
     { id:'profile',   icon:'👤', label:'My profile' },
   ];
@@ -1090,17 +1099,18 @@ function restoreSidebarState() {
 }
 
 const PAGE_META = {
-  dashboard:  { title:'My dashboard',  sub:'Your upcoming events and RSVP status' },
-  races:      { title:'Races',         sub:'Upcoming and past race events' },
-  practices:  { title:'Practices',     sub:'Upcoming and past practice sessions' },
-  profile:    { title:'My profile',    sub:'Your personal details and settings' },
-  roster:     { title:'Roster',        sub:'All team members' },
-  lineup:     { title:'Lineup',        sub:'Seat assignments for events' },
-  events:     { title:'Events',        sub:'All practices and races' },
-  attendance: { title:'Attendance',    sub:'Track who shows up' },
-  reminders:  { title:'Reminders',     sub:'Email members who haven\'t responded' },
-  approvals:  { title:'Approvals',     sub:'Manage member access and roles' },
-  settings:   { title:'Settings',      sub:'Team configuration' },
+  dashboard:  { title:'My dashboard',       sub:'Your upcoming events and RSVP status' },
+  races:      { title:'Races',              sub:'Upcoming and past race events' },
+  practices:  { title:'Practices',          sub:'Upcoming and past practice sessions' },
+  socials:    { title:'Otter S.O.C.I.A.L', sub:'Social events for the team' },
+  profile:    { title:'My profile',         sub:'Your personal details and settings' },
+  roster:     { title:'Roster',             sub:'All team members' },
+  lineup:     { title:'Lineup',             sub:'Seat assignments for events' },
+  events:     { title:'Events',             sub:'All practices and races' },
+  attendance: { title:'Attendance',         sub:'Track who shows up' },
+  reminders:  { title:'Reminders',          sub:'Email members who haven\'t responded' },
+  approvals:  { title:'Approvals',          sub:'Manage member access and roles' },
+  settings:   { title:'Settings',           sub:'Team configuration' },
 };
 
 function navigate(page) {
@@ -1113,7 +1123,7 @@ function navigate(page) {
   document.getElementById('pg-actions').innerHTML = '';
   document.getElementById('pg-content').innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading…</div>';
   closeSidebar();
-  ({ dashboard:pgDashboard, races:pgRaces, practices:pgPractices, profile:pgProfile, roster:pgRoster, lineup:pgLineup, events:pgEvents, attendance:pgAttendance, reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
+  ({ dashboard:pgDashboard, races:pgRaces, practices:pgPractices, socials:pgSocials, profile:pgProfile, roster:pgRoster, lineup:pgLineup, events:pgEvents, attendance:pgAttendance, reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1191,7 +1201,7 @@ function pgDashboard() {
               const seat=mySeat(ev.id);
               const pill=rsvp==='yes'?'<span class="rsvp-status-pill yes">\u2713 Went</span>':rsvp==='no'?'<span class="rsvp-status-pill no">\u2717 Absent</span>':'<span class="rsvp-status-pill pending">— No reply</span>';
               return `<tr style="border-bottom:1px solid var(--border)">
-                <td style="padding:11px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></td>
+                <td style="padding:11px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge ${evBadgeClass(ev.type)}" style="font-size:10px">${ev.type}</span></td>
                 <td style="padding:11px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td>
                 <td style="padding:11px 16px;text-align:center">${pill}</td>
                 <td style="padding:11px 16px;text-align:center;font-size:13px;color:var(--text-2)">${seat?'🚣 '+esc(seat):'—'}</td>
@@ -1233,7 +1243,7 @@ function renderDashCalendar(year, month, allEvents, uid) {
     const dots = isCur ? dayEvs.slice(0,2).map(ev=>{
       const rsvp=(ev.rsvps||{})[uid]||'';
       const rc=rsvp==='yes'?'rsvp-yes':rsvp==='no'?'rsvp-no':'rsvp-pending';
-      return `<div class="cal-event-dot ${ev.type.toLowerCase()} ${rc}" onclick="event.stopPropagation();openEventDetail('${ev.id}',event)" title="${esc(ev.name)}">${ev.type==='Race'?'🏁':'🚣'} ${esc(ev.name.length>10?ev.name.slice(0,10)+'…':ev.name)}</div>`;
+      return `<div class="cal-event-dot ${evBadgeClass(ev.type)} ${rc}" onclick="event.stopPropagation();openEventDetail('${ev.id}',event)" title="${esc(ev.name)}">${evIcon(ev.type)} ${esc(ev.name.length>10?ev.name.slice(0,10)+'…':ev.name)}</div>`;
     }).join('')+(dayEvs.length>2?`<div class="cal-more">+${dayEvs.length-2} more</div>`:'') : '';
     cellsHtml += `<div class="cal-day${isCur?'':' other-month'}${isToday?' today':''}${hasEv?' has-event':''}" ${hasEv&&isCur?`onclick="calDayClick('${dateStr}')"`:''}>${isToday?'<div class="cal-day-num">'+cellDate.getDate()+'</div>':'<div class="cal-day-num">'+cellDate.getDate()+'</div>'}${dots}</div>`;
   }
@@ -1253,6 +1263,7 @@ function renderDashCalendar(year, month, allEvents, uid) {
     <div class="cal-legend">
       <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:var(--accent-bg);border:1px solid var(--accent-text)"></div> Practice</div>
       <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:var(--race-bg);border:1px solid var(--race-text)"></div> Race</div>
+      <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#fff3e0;border:1px solid #b45309"></div> 🦦 S.O.C.I.A.L</div>
       <div class="cal-legend-item"><span style="font-size:10px;border:1px dashed var(--text-3);border-radius:3px;padding:0 4px;color:var(--text-3)">dashed</span> No reply</div>
       <div class="cal-legend-item"><span style="opacity:.4;font-size:12px;color:var(--text-2)">faded</span> Not going</div>
     </div>
@@ -1295,9 +1306,9 @@ function renderDashEventList(allEvents, uid, mySeat) {
     const du=Math.round((new Date(ev.date+'T12:00:00')-new Date())/86400000);
     const dl=du===0?'🔴 Today!':du===1?'🟡 Tomorrow':`${du}d away`;
     return `<div class="event-rsvp-card ${sc} clickable" id="ecard-${ev.id}" onclick="openEventDetail('${ev.id}',event)">
-      <div class="event-rsvp-icon" style="background:${isRace?'var(--race-bg)':'var(--accent-bg)'}">${isRace?'🏁':'🚣'}</div>
+      <div class="event-rsvp-icon" style="background:${evBg(ev.type)}">${evIcon(ev.type)}</div>
       <div class="event-rsvp-info">
-        <div class="event-rsvp-name">${esc(ev.name)} <span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></div>
+        <div class="event-rsvp-name">${esc(ev.name)} <span class="badge ${evBadgeClass(ev.type)}" style="font-size:10px">${ev.type}</span></div>
         <div class="event-rsvp-meta">
           <span>📅 ${fmtDate(ev.date)}</span>
           ${ev.time?`<span>🕐 ${fmtTime(ev.time)}</span>`:''}
@@ -1340,7 +1351,7 @@ window.openEventDetail = function(evId, domEvent) {
         <div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div class="modal-title">${esc(ev.name)}</div>
-            <span class="badge badge-${ev.type.toLowerCase()}">${ev.type}</span>
+            <span class="badge ${evBadgeClass(ev.type)}">${ev.type}</span>
           </div>
           <div class="modal-sub" style="margin-top:4px;display:flex;gap:14px;flex-wrap:wrap">
             <span>📅 ${fmtDate(ev.date)}</span>
@@ -1635,9 +1646,9 @@ function navigatePendingRsvp() {
           return k ? k.replace(/_/g,' ') : null;
         })();
         return `<div class="event-rsvp-card rsvp-pending clickable" id="ecard-${ev.id}" onclick="openEventDetail('${ev.id}',event)">
-          <div class="event-rsvp-icon" style="background:${isRace?'var(--race-bg)':'var(--accent-bg)'}">${isRace?'🏁':'🚣'}</div>
+          <div class="event-rsvp-icon" style="background:${evBg(ev.type)}">${evIcon(ev.type)}</div>
           <div class="event-rsvp-info">
-            <div class="event-rsvp-name">${esc(ev.name)} <span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></div>
+            <div class="event-rsvp-name">${esc(ev.name)} <span class="badge ${evBadgeClass(ev.type)}" style="font-size:10px">${ev.type}</span></div>
             <div class="event-rsvp-meta">
               <span>📅 ${fmtDate(ev.date)}</span>
               ${ev.time?`<span>🕐 ${fmtTime(ev.time)}</span>`:''}
@@ -1706,6 +1717,13 @@ function pgPractices() {
   pgFilteredEvents('Practice');
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// OTTER S.O.C.I.A.L
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgSocials() {
+  pgFilteredEvents('Otter S.O.C.I.A.L');
+}
+
 // Shared renderer for Races / Practices member view
 function pgFilteredEvents(typeFilter) {
   const C = document.getElementById('pg-content');
@@ -1716,11 +1734,8 @@ function pgFilteredEvents(typeFilter) {
   if (can.edit()) {
     const b = document.createElement('button');
     b.className = 'btn btn-primary';
-    b.innerHTML = `＋ Add ${typeFilter.toLowerCase()}`;
-    b.onclick = () => {
-      // Pre-select the type in the event modal
-      openEvtModal(null, typeFilter);
-    };
+    b.innerHTML = `＋ Add ${typeFilter==='Otter S.O.C.I.A.L'?'social event':typeFilter.toLowerCase()}`;
+    b.onclick = () => { openEvtModal(null, typeFilter); };
     A.appendChild(b);
   }
 
@@ -1743,7 +1758,7 @@ function pgFilteredEvents(typeFilter) {
       }
 
       if (!all.length) {
-        C.innerHTML = `<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">${typeFilter==='Race'?'🏁':'🚣'}</div><div class="empty-title">No ${typeFilter.toLowerCase()}s yet</div></div></div>`;
+        C.innerHTML = `<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">${evIcon(typeFilter)}</div><div class="empty-title">No ${typeFilter==='Otter S.O.C.I.A.L'?'social events':typeFilter.toLowerCase()+'s'} yet</div></div></div>`;
         return;
       }
 
@@ -1768,7 +1783,7 @@ function pgFilteredEvents(typeFilter) {
                 ${ev.recurGroup?`<button class="btn btn-sm btn-ghost" style="color:var(--danger-text);font-size:11px" onclick="delSeries('${ev.recurGroup}')">Delete series</button>`:''}
                </div>` : '';
           return `<div class="event-rsvp-card ${borderClass} clickable" id="ecard-${ev.id}" onclick="openEventDetail('${ev.id}',event)">
-            <div class="event-rsvp-icon" style="background:${typeFilter==='Race'?'var(--race-bg)':'var(--accent-bg)'}">${typeFilter==='Race'?'🏁':'🚣'}</div>
+            <div class="event-rsvp-icon" style="background:${evBg(ev.type)}">${evIcon(ev.type)}</div>
             <div class="event-rsvp-info">
               <div class="event-rsvp-name">
                 ${esc(ev.name)}
@@ -1817,13 +1832,16 @@ function pgProfile() {
 
     const pastPractices = past.filter(e=>e.type==='Practice');
     const pastRaces     = past.filter(e=>e.type==='Race');
+    const pastSocials   = past.filter(e=>e.type==='Otter S.O.C.I.A.L');
     const attPractices  = pastPractices.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
     const attRaces      = pastRaces.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
-    const totalAtt      = attPractices + attRaces;
+    const attSocials    = pastSocials.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
+    const totalAtt      = attPractices + attRaces + attSocials;
     const totalPast     = past.length;
     const attPct        = totalPast ? Math.round(totalAtt/totalPast*100) : null;
     const practicePct   = pastPractices.length ? Math.round(attPractices/pastPractices.length*100) : null;
     const racePct       = pastRaces.length ? Math.round(attRaces/pastRaces.length*100) : null;
+    const socialPct     = pastSocials.length ? Math.round(attSocials/pastSocials.length*100) : null;
     const pendingRsvp   = upcoming.filter(e=>!(e.rsvps||{})[p.uid]).length;
     const upcomingGoing = upcoming.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
 
@@ -1889,7 +1907,7 @@ function pgProfile() {
           ${statBlock(attPct!==null?attPct+'%':'—', 'Overall rate', attPct===null?'var(--text-3)':attPct>=80?'var(--success)':attPct>=50?'var(--warning)':'var(--danger)')}
           ${statBlock(pendingRsvp, 'Awaiting RSVP', pendingRsvp>0?'var(--warning)':'var(--text-3)')}
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
           <div class="card" style="padding:16px">
             <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🚣 Practices</div>
             <div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${practicePct===null?'var(--text-3)':practicePct>=80?'var(--success)':practicePct>=50?'var(--warning)':'var(--danger)'}">${practicePct!==null?practicePct+'%':'—'}</div>
@@ -1899,6 +1917,11 @@ function pgProfile() {
             <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🏁 Races</div>
             <div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${racePct===null?'var(--text-3)':racePct>=80?'var(--success)':racePct>=50?'var(--warning)':'var(--danger)'}">${racePct!==null?racePct+'%':'—'}</div>
             <div style="font-size:13px;color:var(--text-3);margin-top:2px">${attRaces} / ${pastRaces.length} attended</div>
+          </div>
+          <div class="card" style="padding:16px">
+            <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🦦 S.O.C.I.A.L</div>
+            <div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${socialPct===null?'var(--text-3)':socialPct>=80?'var(--success)':socialPct>=50?'var(--warning)':'var(--danger)'}">${socialPct!==null?socialPct+'%':'—'}</div>
+            <div style="font-size:13px;color:var(--text-3);margin-top:2px">${attSocials} / ${pastSocials.length} attended</div>
           </div>
         </div>
 
@@ -1925,7 +1948,7 @@ function pgProfile() {
               const r=(ev.rsvps||{})[p.uid];
               const pill=r==='yes'?`<span class="rsvp-status-pill yes">✓ Yes</span>`:r==='no'?`<span class="rsvp-status-pill no">✗ No</span>`:`<span class="rsvp-status-pill pending">— No reply</span>`;
               return `<tr style="border-bottom:1px solid var(--border)">
-                <td style="padding:10px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge badge-${ev.type.toLowerCase()}" style="font-size:10px">${ev.type}</span></td>
+                <td style="padding:10px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge ${evBadgeClass(ev.type)}" style="font-size:10px">${ev.type}</span></td>
                 <td style="padding:10px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td>
                 <td style="padding:10px 16px;text-align:center">${pill}</td>
               </tr>`;
@@ -2308,7 +2331,7 @@ function pgEvents() {
           return `<div class="event-card">
             <div class="event-icon" style="background:${ev.type==='Race'?'var(--race-bg)':'var(--accent-bg)'}">${ev.type==='Race'?'🏁':'🚣'}</div>
             <div style="flex:1;min-width:0">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap"><span class="event-name">${esc(ev.name)}</span><span class="badge badge-${ev.type.toLowerCase()}">${ev.type}</span>${ev.recurGroup?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text)">↻ recurring</span>':''}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap"><span class="event-name">${esc(ev.name)}</span><span class="badge ${evBadgeClass(ev.type)}">${ev.type}</span>${ev.recurGroup?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text)">↻ recurring</span>':''}</div>
               <div class="event-meta"><span>📅 ${fmtDate(ev.date)}</span><span>🕐 ${fmtTime(ev.time)}</span><span>📍 ${esc(ev.location)}</span></div>
               <div class="event-tally"><span style="color:var(--success)">✓ ${yes}</span><span style="color:var(--danger)">✗ ${no}</span><span style="color:var(--text-3)">· ${pend} no reply</span></div>
             </div>
@@ -2352,6 +2375,7 @@ function openEvtModal(evJson, defaultType) {
         <div class="form-group" style="margin:0"><label class="form-label">Type</label><select id="ef-type" onchange="toggleRecurring(this.value)">
           <option ${e.type==='Practice'?'selected':''}>Practice</option>
           <option ${e.type==='Race'?'selected':''}>Race</option>
+          <option value="Otter S.O.C.I.A.L" ${e.type==='Otter S.O.C.I.A.L'?'selected':''}>Otter S.O.C.I.A.L</option>
         </select></div>
         <div class="form-group" style="margin:0"><label class="form-label">Date *</label><input id="ef-date" type="date" value="${esc(e.date)}"></div>
       </div>
@@ -2383,7 +2407,7 @@ function openEvtModal(evJson, defaultType) {
 }
 
 window.toggleRecurring = v => {
-  document.getElementById('recurring-section').style.display = v==='Race' ? 'none' : '';
+  document.getElementById('recurring-section').style.display = v==='Practice' ? '' : 'none';
 };
 window.toggleRecurUntil = v => {
   document.getElementById('recur-until-row').style.display = v==='none' ? 'none' : '';
@@ -2568,7 +2592,7 @@ function pgReminders() {
       return `<div class="reminder-card" id="rc-${ev.id}">
         <div class="reminder-header">
           <span style="font-weight:700;font-size:15px">${esc(ev.name)}</span>
-          <span class="badge badge-${ev.type.toLowerCase()}">${ev.type}</span>
+          <span class="badge ${evBadgeClass(ev.type)}">${ev.type}</span>
           <span style="font-size:13px;color:var(--text-2)">${fmtDate(ev.date)} · ${fmtTime(ev.time)}</span>
         </div>
         <div class="reminder-tabs">
