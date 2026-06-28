@@ -318,11 +318,11 @@ tbody tr:hover td { background: var(--surface-alt); }
 /* ── Modal ── */
 .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 16px; }
 .modal { background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-md); width: min(560px, 100%); max-height: 92vh; overflow-y: auto; border: 1px solid var(--border); }
-.modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-shrink: 0; }
 .modal-title  { font-size: 17px; font-weight: 700; }
 .modal-sub    { font-size: 13px; color: var(--text-3); margin-top: 2px; }
-.modal-body   { padding: 20px 24px; }
-.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+.modal-body   { padding: 20px 24px; overflow-y: auto; -webkit-overflow-scrolling: touch; flex: 1; }
+.modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
 .form-grid-2  { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form-grid-3  { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
 
@@ -571,11 +571,20 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 
   /* Modals — slide up from bottom on mobile */
   .overlay { padding: 0; align-items: flex-end; background: rgba(0,0,0,0.6); }
-  .modal { border-radius: 20px 20px 0 0; max-height: 88vh; width: 100% !important; min-width: 0; }
+  .modal {
+    border-radius: 20px 20px 0 0;
+    max-height: 88vh;
+    max-height: 88dvh; /* dynamic viewport height — shrinks when keyboard opens */
+    width: 100% !important;
+    min-width: 0;
+  }
   .modal-header { padding: 16px 18px 12px; }
   .modal-title { font-size: 15px; }
   .modal-body { padding: 14px 18px; }
-  .modal-footer { padding: 12px 18px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .modal-footer {
+    padding: 12px 18px;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
 
   /* RSVP rows in modal */
   .rsvp-row { gap: 8px; padding: 12px 0; }
@@ -1585,7 +1594,7 @@ window.evdPickSeat = function(evId, key) {
       closeModal();
       const overlay=document.createElement('div'); overlay.className='overlay';
       overlay.addEventListener('click',e=>{if(e.target===overlay){closeModal();modalEl=parentModal;}});
-      overlay.innerHTML=`<div class="modal">
+      overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
         <div class="modal-header"><div><div class="modal-title">Assign seat</div><div class="modal-sub">${esc(key.replace(/_/g,' '))}${sideHint}</div></div><button class="btn btn-sm btn-ghost" onclick="closeModal();modalEl=null;openEventDetail('${evId}',null)">✕</button></div>
         <div class="modal-body" style="padding:12px 24px">
           <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
@@ -2142,7 +2151,7 @@ function openMemberModal(mJson) {
   const isNew = !m;
   const overlay = document.createElement('div'); overlay.className='overlay';
   overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
-  overlay.innerHTML=`<div class="modal">
+  overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
     <div class="modal-header"><div class="modal-title">${isNew?'Add member':'Edit member'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
     <div class="modal-body">
       ${isNew?`<div class="form-grid-2" style="margin-bottom:14px">
@@ -2324,7 +2333,7 @@ window.pickSeat = function(evId, key) {
       const sideHint = key.includes('left')?' — prefer Left':key.includes('right')?' — prefer Right':'';
       const overlay = document.createElement('div'); overlay.className='overlay';
       overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
-      overlay.innerHTML=`<div class="modal">
+      overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
         <div class="modal-header"><div><div class="modal-title">Assign seat</div><div class="modal-sub">${esc(key.replace(/_/g,' '))}${sideHint}</div></div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
         <div class="modal-body" style="padding:12px 24px">
           <input type="text" id="seat-q" placeholder="Search member…" style="margin-bottom:12px" oninput="filterSeats(this.value)">
@@ -2411,30 +2420,28 @@ function openEvtModal(evJson, defaultType) {
   const isNew = !ev;
   const overlay = document.createElement('div'); overlay.className='overlay';
   overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
-  overlay.innerHTML=`<div class="modal">
-    <div class="modal-header"><div class="modal-title">${isNew?'Add event':'Edit event'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
-    <div class="modal-body">
+  overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+    <div class="modal-header" style="flex-shrink:0"><div class="modal-title">${isNew?'Add event':'Edit event'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1">
       <div class="form-group"><label class="form-label">Event name *</label><input id="ef-name" value="${esc(e.name)}" placeholder="Tuesday Practice"></div>
-      <div class="form-grid-2" style="margin-bottom:14px">
-        <div class="form-group" style="margin:0"><label class="form-label">Type</label><select id="ef-type" onchange="toggleRecurring(this.value)">
+      <div class="form-group"><label class="form-label">Type</label>
+        <select id="ef-type" onchange="toggleRecurring(this.value)">
           <option ${e.type==='Practice'?'selected':''}>Practice</option>
           <option ${e.type==='Race'?'selected':''}>Race</option>
           <option value="Otter S.O.C.I.A.L" ${e.type==='Otter S.O.C.I.A.L'?'selected':''}>Otter S.O.C.I.A.L</option>
-        </select></div>
-        <div class="form-group" style="margin:0"><label class="form-label">Date *</label><input id="ef-date" type="date" value="${esc(e.date)}"></div>
+        </select>
       </div>
-      <div class="form-grid-2" style="margin-bottom:14px">
-        <div class="form-group" style="margin:0"><label class="form-label">Time</label><input id="ef-time" type="time" value="${esc(e.time)}"></div>
-        <div class="form-group" style="margin:0"><label class="form-label">Location</label><input id="ef-loc" value="${esc(e.location)}" placeholder="Rocky Point Pier"></div>
-      </div>
-      <div id="recurring-section" style="${e.type==='Race'?'display:none':''}">
+      <div class="form-group"><label class="form-label">Date *</label><input id="ef-date" type="date" value="${esc(e.date)}"></div>
+      <div class="form-group"><label class="form-label">Time</label><input id="ef-time" type="time" value="${esc(e.time)}"></div>
+      <div class="form-group"><label class="form-label">Location</label><input id="ef-loc" value="${esc(e.location)}" placeholder="Rocky Point Pier"></div>
+      <div id="recurring-section" style="${e.type==='Practice'?'':'display:none'}">
         <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:2px">
           <div class="form-group"><label class="form-label">Repeats</label>
             <select id="ef-recur" onchange="toggleRecurUntil(this.value)">
-              <option value="none"    ${(e.recurring||'none')==='none'?'selected':''}>Does not repeat</option>
-              <option value="weekly"  ${e.recurring==='weekly'?'selected':''}>Every week</option>
-              <option value="biweekly"${e.recurring==='biweekly'?'selected':''}>Every 2 weeks</option>
-              <option value="monthly" ${e.recurring==='monthly'?'selected':''}>Every month</option>
+              <option value="none"     ${(e.recurring||'none')==='none'?'selected':''}>Does not repeat</option>
+              <option value="weekly"   ${e.recurring==='weekly'?'selected':''}>Every week</option>
+              <option value="biweekly" ${e.recurring==='biweekly'?'selected':''}>Every 2 weeks</option>
+              <option value="monthly"  ${e.recurring==='monthly'?'selected':''}>Every month</option>
             </select>
           </div>
           <div id="recur-until-row" style="${(e.recurring&&e.recurring!=='none')?'':'display:none'}">
@@ -2444,10 +2451,11 @@ function openEvtModal(evJson, defaultType) {
         </div>
       </div>
     </div>
-    <div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEvt('${e.id}',${isNew})">Save event</button></div>
+    <div class="modal-footer" style="flex-shrink:0"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEvt('${e.id}',${isNew})">Save event</button></div>
   </div>`;
   document.body.appendChild(overlay); modalEl=overlay;
-  overlay.querySelector('#ef-name').focus();
+  // Defer focus slightly so mobile keyboard doesn't fight the slide-up animation
+  setTimeout(() => overlay.querySelector('#ef-name')?.focus(), 300);
 }
 
 window.toggleRecurring = v => {
@@ -2515,7 +2523,7 @@ window.openRsvpModal = function(evId) {
     const overlay = document.createElement('div'); overlay.className='overlay';
     overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
     overlay._rsvps = rsvps;
-    overlay.innerHTML=`<div class="modal">
+    overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
       <div class="modal-header"><div><div class="modal-title">RSVPs — ${esc(ev.name)}</div><div class="modal-sub">${fmtDate(ev.date)} · ${fmtTime(ev.time)} · ${esc(ev.location)}</div></div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
       <div class="modal-body">
         ${members.map(m=>{const cur=rsvps[m.uid]||''; return `<div class="rsvp-row">
