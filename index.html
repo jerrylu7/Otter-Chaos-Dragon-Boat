@@ -297,6 +297,8 @@ tbody tr:hover td { background: var(--surface-alt); }
 .badge-yes      { background: var(--success-bg); color: var(--success-text); }
 .badge-no       { background: var(--danger-bg);  color: var(--danger-text); }
 .badge-otter-social, .badge-otter { background: #fff3e0; color: #b45309; }
+.badge-exclusive { background: #1a1916; color: #f5f4f0; font-size: 10px; }
+.exclusive-notice { background: #1a1916; color: #f5f4f0; border-radius: var(--radius); padding: 8px 12px; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; }
 
 .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--accent-bg); color: var(--accent-text); font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .member-cell { display: flex; align-items: center; gap: 10px; }
@@ -810,6 +812,14 @@ const evIcon = t => t==='Race'?'🏁':t==='Otter S.O.C.I.A.L'?'🦦':'🚣';
 const evBg   = t => t==='Race'?'var(--race-bg)':t==='Otter S.O.C.I.A.L'?'#fff3e0':'var(--accent-bg)';
 const evBadgeClass = t => t==='Race'?'badge-race':t==='Otter S.O.C.I.A.L'?'badge-otter':'badge-practice';
 
+// Returns true if the current user is allowed to see this event
+function canSeeEvent(ev) {
+  if (!ev.exclusive) return true;                                    // not exclusive — everyone sees it
+  if (can.admin()) return true;                                      // admins always see everything
+  const invitees = ev.invitees || {};
+  return !!invitees[currentUser.uid];                                // invited UIDs stored as { uid: true }
+}
+
 function roleBadge(r) {
   const cls = {admin:'role-admin',coach:'role-coach',paddler:'role-paddler',tester:'role-tester'}[r]||'role-paddler';
   return `<span class="role-badge ${cls}">${r||'paddler'}</span>`;
@@ -1217,7 +1227,9 @@ function pgDashboard() {
     db.ref('events').orderByChild('date').get(),
     db.ref('lineups').get(),
   ]).then(([evSnap, lineupSnap]) => {
-    const allEvents = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
+    const allEvents = Object.values(evSnap.val()||{})
+      .filter(e => canSeeEvent(e))
+      .sort((a,b)=>a.date.localeCompare(b.date));
     const lineups   = lineupSnap.val()||{};
     const now = today();
     const allUpcoming = allEvents.filter(e => e.date >= now);
@@ -1431,6 +1443,7 @@ window.openEventDetail = function(evId, domEvent) {
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <div class="modal-title">${esc(ev.name)}</div>
             <span class="badge ${evBadgeClass(ev.type)}">${ev.type}</span>
+            ${ev.exclusive?'<span class="badge badge-exclusive">🔒 Invite only</span>':''}
           </div>
           <div class="modal-sub" style="margin-top:4px;display:flex;gap:14px;flex-wrap:wrap">
             <span>📅 ${fmtDate(ev.date)}</span>
@@ -1707,7 +1720,7 @@ function navigatePendingRsvp() {
     const lineups = lSnap.val()||{};
     const now = today();
     const pending = Object.values(evSnap.val()||{})
-      .filter(e => e.date >= now && !(e.rsvps||{})[uid])
+      .filter(e => e.date >= now && !(e.rsvps||{})[uid] && canSeeEvent(e))
       .sort((a,b) => a.date.localeCompare(b.date));
 
     if (!pending.length) {
@@ -1823,7 +1836,7 @@ function pgFilteredEvents(typeFilter) {
     db.ref('lineups').get().then(lSnap => {
       const lineups = lSnap.val() || {};
       const all = Object.values(snap.val()||{})
-        .filter(e => e.type === typeFilter)
+        .filter(e => e.type === typeFilter && canSeeEvent(e))
         .sort((a,b) => a.date.localeCompare(b.date));
       const now = today();
       const upcoming = all.filter(e => e.date >= now);
@@ -1868,6 +1881,7 @@ function pgFilteredEvents(typeFilter) {
               <div class="event-rsvp-name">
                 ${esc(ev.name)}
                 ${ev.recurGroup?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text);font-size:10px;margin-left:4px">↻</span>':''}
+                ${ev.exclusive?'<span class="badge badge-exclusive" style="margin-left:4px">🔒 Invite only</span>':''}
               </div>
               <div class="event-rsvp-meta">
                 <span>📅 ${fmtDate(ev.date)}</span>
@@ -2411,7 +2425,7 @@ function pgEvents() {
           return `<div class="event-card">
             <div class="event-icon" style="background:${ev.type==='Race'?'var(--race-bg)':'var(--accent-bg)'}">${ev.type==='Race'?'🏁':'🚣'}</div>
             <div style="flex:1;min-width:0">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap"><span class="event-name">${esc(ev.name)}</span><span class="badge ${evBadgeClass(ev.type)}">${ev.type}</span>${ev.recurGroup?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text)">↻ recurring</span>':''}</div>
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap"><span class="event-name">${esc(ev.name)}</span><span class="badge ${evBadgeClass(ev.type)}">${ev.type}</span>${ev.recurGroup?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text)">↻ recurring</span>':''}${ev.exclusive?'<span class="badge badge-exclusive">🔒 Invitees only</span>':''}</div>
               <div class="event-meta"><span>📅 ${fmtDate(ev.date)}</span><span>🕐 ${fmtTime(ev.time)}</span><span>📍 ${esc(ev.location)}</span></div>
               <div class="event-tally"><span style="color:var(--success)">✓ ${yes}</span><span style="color:var(--danger)">✗ ${no}</span><span style="color:var(--text-3)">· ${pend} no reply</span></div>
             </div>
@@ -2443,46 +2457,86 @@ window.delSeries = async groupId => {
 function openEvtModal(evJson, defaultType) {
   if (!can.edit()) return; closeModal();
   const ev = evJson ? JSON.parse(typeof evJson==='string'?evJson:JSON.stringify(evJson)) : null;
-  const e  = ev || { id:uid('e'), name:'', type:defaultType||'Practice', date:'', time:'', location:'', rsvps:{}, recurring:'none', recurUntil:'' };
+  const e  = ev || { id:uid('e'), name:'', type:defaultType||'Practice', date:'', time:'', location:'', rsvps:{}, recurring:'none', recurUntil:'', exclusive:false, invitees:{} };
   const isNew = !ev;
   const overlay = document.createElement('div'); overlay.className='overlay';
   overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
-  overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
-    <div class="modal-header" style="flex-shrink:0"><div class="modal-title">${isNew?'Add event':'Edit event'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
-    <div class="modal-body" style="overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1">
-      <div class="form-group"><label class="form-label">Event name *</label><input id="ef-name" value="${esc(e.name)}" placeholder="Tuesday Practice"></div>
-      <div class="form-group"><label class="form-label">Type</label>
-        <select id="ef-type" onchange="toggleRecurring(this.value)">
-          <option ${e.type==='Practice'?'selected':''}>Practice</option>
-          <option ${e.type==='Race'?'selected':''}>Race</option>
-          <option value="Otter S.O.C.I.A.L" ${e.type==='Otter S.O.C.I.A.L'?'selected':''}>Otter S.O.C.I.A.L</option>
-        </select>
-      </div>
-      <div class="form-group"><label class="form-label">Date *</label><input id="ef-date" type="date" value="${esc(e.date)}"></div>
-      <div class="form-group"><label class="form-label">Time</label><input id="ef-time" type="time" value="${esc(e.time)}"></div>
-      <div class="form-group"><label class="form-label">Location</label><input id="ef-loc" value="${esc(e.location)}" placeholder="Rocky Point Pier"></div>
-      <div id="recurring-section" style="${e.type==='Practice'?'':'display:none'}">
-        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:2px">
-          <div class="form-group"><label class="form-label">Repeats</label>
-            <select id="ef-recur" onchange="toggleRecurUntil(this.value)">
-              <option value="none"     ${(e.recurring||'none')==='none'?'selected':''}>Does not repeat</option>
-              <option value="weekly"   ${e.recurring==='weekly'?'selected':''}>Every week</option>
-              <option value="biweekly" ${e.recurring==='biweekly'?'selected':''}>Every 2 weeks</option>
-              <option value="monthly"  ${e.recurring==='monthly'?'selected':''}>Every month</option>
-            </select>
-          </div>
-          <div id="recur-until-row" style="${(e.recurring&&e.recurring!=='none')?'':'display:none'}">
-            <div class="form-group" style="margin:0"><label class="form-label">Repeat until *</label><input id="ef-recur-until" type="date" value="${esc(e.recurUntil||'')}"></div>
-            <div style="font-size:12px;color:var(--text-3);margin-top:4px">Individual occurrences can be edited or deleted after they're created.</div>
+
+  // Load members for invitee picker (admin only)
+  db.ref('users').get().then(uSnap => {
+    const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+    const invitees = e.invitees||{};
+
+    overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+      <div class="modal-header" style="flex-shrink:0"><div class="modal-title">${isNew?'Add event':'Edit event'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+      <div class="modal-body" style="overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1">
+        <div class="form-group"><label class="form-label">Event name *</label><input id="ef-name" value="${esc(e.name)}" placeholder="Tuesday Practice"></div>
+        <div class="form-group"><label class="form-label">Type</label>
+          <select id="ef-type" onchange="toggleRecurring(this.value)">
+            <option ${e.type==='Practice'?'selected':''}>Practice</option>
+            <option ${e.type==='Race'?'selected':''}>Race</option>
+            <option value="Otter S.O.C.I.A.L" ${e.type==='Otter S.O.C.I.A.L'?'selected':''}>Otter S.O.C.I.A.L</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Date *</label><input id="ef-date" type="date" value="${esc(e.date)}"></div>
+        <div class="form-group"><label class="form-label">Time</label><input id="ef-time" type="time" value="${esc(e.time)}"></div>
+        <div class="form-group"><label class="form-label">Location</label><input id="ef-loc" value="${esc(e.location)}" placeholder="Rocky Point Pier"></div>
+        <div id="recurring-section" style="${e.type==='Practice'?'':'display:none'}">
+          <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:2px">
+            <div class="form-group"><label class="form-label">Repeats</label>
+              <select id="ef-recur" onchange="toggleRecurUntil(this.value)">
+                <option value="none"     ${(e.recurring||'none')==='none'?'selected':''}>Does not repeat</option>
+                <option value="weekly"   ${e.recurring==='weekly'?'selected':''}>Every week</option>
+                <option value="biweekly" ${e.recurring==='biweekly'?'selected':''}>Every 2 weeks</option>
+                <option value="monthly"  ${e.recurring==='monthly'?'selected':''}>Every month</option>
+              </select>
+            </div>
+            <div id="recur-until-row" style="${(e.recurring&&e.recurring!=='none')?'':'display:none'}">
+              <div class="form-group" style="margin:0"><label class="form-label">Repeat until *</label><input id="ef-recur-until" type="date" value="${esc(e.recurUntil||'')}"></div>
+              <div style="font-size:12px;color:var(--text-3);margin-top:4px">Individual occurrences can be edited or deleted after they're created.</div>
+            </div>
           </div>
         </div>
+
+        ${can.admin() ? `
+        <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
+            <div style="position:relative;width:42px;height:24px;flex-shrink:0">
+              <input type="checkbox" id="ef-exclusive" ${e.exclusive?'checked':''} onchange="toggleInviteeSection(this.checked)" style="opacity:0;width:0;height:0;position:absolute">
+              <div id="ef-exclusive-track" style="position:absolute;inset:0;border-radius:12px;background:${e.exclusive?'var(--accent)':'var(--border-strong)'};transition:background 0.2s;cursor:pointer" onclick="document.getElementById('ef-exclusive').click()"></div>
+              <div id="ef-exclusive-thumb" style="position:absolute;top:3px;left:${e.exclusive?'21px':'3px'};width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);transition:left 0.2s;pointer-events:none"></div>
+            </div>
+            <div>
+              <div style="font-size:14px;font-weight:700">🔒 Invitees only</div>
+              <div style="font-size:12px;color:var(--text-3)">Only selected members can see this event</div>
+            </div>
+          </label>
+          <div id="ef-invitee-section" style="${e.exclusive?'':'display:none'}">
+            <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Select invitees</div>
+            <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;max-height:220px;overflow-y:auto">
+              ${members.map(m=>`
+                <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s" onmouseover="this.style.background='var(--surface-alt)'" onmouseout="this.style.background=''">
+                  <input type="checkbox" data-uid="${m.uid}" class="ef-inv-cb" ${invitees[m.uid]?'checked':''} style="width:auto;min-width:0;padding:0;border:none;box-shadow:none;flex-shrink:0">
+                  <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0">${initials(m.name)}</div>
+                  <div>
+                    <div style="font-size:13px;font-weight:600">${esc(m.name)}</div>
+                    <div style="font-size:11px;color:var(--text-3)">${roleBadge(m.role)}</div>
+                  </div>
+                </label>`).join('')}
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-sm btn-ghost" onclick="invSelectAll(true)">Select all</button>
+              <button class="btn btn-sm btn-ghost" onclick="invSelectAll(false)">Deselect all</button>
+            </div>
+          </div>
+        </div>` : ''}
       </div>
-    </div>
-    <div class="modal-footer" style="flex-shrink:0"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEvt('${e.id}',${isNew})">Save event</button></div>
-  </div>`;
-  document.body.appendChild(overlay); modalEl=overlay;
-  // Defer focus slightly so mobile keyboard doesn't fight the slide-up animation
-  setTimeout(() => overlay.querySelector('#ef-name')?.focus(), 300);
+      <div class="modal-footer" style="flex-shrink:0"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveEvt('${e.id}',${isNew})">Save event</button></div>
+    </div>`;
+
+    document.body.appendChild(overlay); modalEl=overlay;
+    setTimeout(() => overlay.querySelector('#ef-name')?.focus(), 300);
+  });
 }
 
 window.toggleRecurring = v => {
@@ -2490,6 +2544,16 @@ window.toggleRecurring = v => {
 };
 window.toggleRecurUntil = v => {
   document.getElementById('recur-until-row').style.display = v==='none' ? 'none' : '';
+};
+window.toggleInviteeSection = function(checked) {
+  document.getElementById('ef-invitee-section').style.display = checked ? '' : 'none';
+  const track = document.getElementById('ef-exclusive-track');
+  const thumb = document.getElementById('ef-exclusive-thumb');
+  if (track) track.style.background = checked ? 'var(--accent)' : 'var(--border-strong)';
+  if (thumb) thumb.style.left = checked ? '21px' : '3px';
+};
+window.invSelectAll = function(state) {
+  document.querySelectorAll('.ef-inv-cb').forEach(cb => cb.checked = state);
 };
 
 window.saveEvt = async (id, isNew) => {
@@ -2502,11 +2566,22 @@ window.saveEvt = async (id, isNew) => {
   const recurring   = (document.getElementById('ef-recur')?.value)||'none';
   const recurUntil  = (document.getElementById('ef-recur-until')?.value)||'';
 
+  // Exclusive / invitees (admin only)
+  const exclusiveEl = document.getElementById('ef-exclusive');
+  const exclusive = exclusiveEl ? exclusiveEl.checked : false;
+  const invitees = {};
+  if (exclusive && can.admin()) {
+    document.querySelectorAll('.ef-inv-cb:checked').forEach(cb => { invitees[cb.dataset.uid] = true; });
+    // Always include the admin who created it
+    invitees[currentUser.uid] = true;
+  }
+
   if (!name||!date) { alert('Name and date are required.'); return; }
+  if (exclusive && Object.keys(invitees).length <= 1) { alert('Please select at least one invitee (besides yourself).'); return; }
   if (recurring!=='none' && !recurUntil) { alert('Please set a "Repeat until" date.'); return; }
   if (recurUntil && recurUntil <= date)  { alert('"Repeat until" must be after the start date.'); return; }
 
-  const base = { name, date, type, time, location, recurring, recurUntil };
+  const base = { name, date, type, time, location, recurring, recurUntil, exclusive, invitees };
 
   if (isNew && recurring !== 'none') {
     // Generate all occurrences
@@ -2648,7 +2723,7 @@ function pgReminders() {
   const twoDaysStr = (()=>{ const d=new Date(); d.setDate(d.getDate()+2); return d.toISOString().slice(0,10); })();
   Promise.all([db.ref('users').get(), db.ref('events').get(), db.ref('settings/teamName').get()]).then(([uSnap,evSnap,tnSnap]) => {
     const members  = Object.values(uSnap.val()||{}).filter(u=>u.approved);
-    const events   = Object.values(evSnap.val()||{}).filter(e=>e.date>=today()).sort((a,b)=>a.date.localeCompare(b.date));
+    const events   = Object.values(evSnap.val()||{}).filter(e=>e.date>=today() && canSeeEvent(e)).sort((a,b)=>a.date.localeCompare(b.date));
     const teamName = tnSnap.val()||TEAM_NAME_DEFAULT;
     const autoTargets = events.filter(e=>e.type==='Practice'&&e.date===twoDaysStr);
     const emailStatus = emailjsOn
