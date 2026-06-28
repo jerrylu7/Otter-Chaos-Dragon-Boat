@@ -2500,33 +2500,35 @@ function openEvtModal(evJson, defaultType) {
 
         ${can.admin() ? `
         <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:14px">
-          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-bottom:10px">
-            <div style="position:relative;width:42px;height:24px;flex-shrink:0">
-              <input type="checkbox" id="ef-exclusive" ${e.exclusive?'checked':''} onchange="toggleInviteeSection(this.checked)" style="opacity:0;width:0;height:0;position:absolute">
-              <div id="ef-exclusive-track" style="position:absolute;inset:0;border-radius:12px;background:${e.exclusive?'var(--accent)':'var(--border-strong)'};transition:background 0.2s;cursor:pointer" onclick="document.getElementById('ef-exclusive').click()"></div>
-              <div id="ef-exclusive-thumb" style="position:absolute;top:3px;left:${e.exclusive?'21px':'3px'};width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);transition:left 0.2s;pointer-events:none"></div>
-            </div>
-            <div>
-              <div style="font-size:14px;font-weight:700">🔒 Invitees only</div>
-              <div style="font-size:12px;color:var(--text-3)">Only selected members can see this event</div>
-            </div>
-          </label>
+          <div style="margin-bottom:12px">
+            <label style="display:flex;align-items:center;gap:12px;cursor:pointer;padding:12px 14px;border:1.5px solid var(--border);border-radius:var(--radius);transition:border-color 0.15s;background:var(--surface-alt)" id="ef-exclusive-label">
+              <span style="font-size:20px">🔒</span>
+              <div style="flex:1">
+                <div style="font-size:14px;font-weight:700">Invitees only</div>
+                <div style="font-size:12px;color:var(--text-3);margin-top:1px">Only selected members can see this event</div>
+              </div>
+              <div id="ef-exclusive-toggle" style="width:44px;height:26px;border-radius:13px;background:${e.exclusive?'var(--accent)':'var(--border-strong)'};position:relative;flex-shrink:0;transition:background 0.2s;cursor:pointer" onclick="toggleExclusive()">
+                <div id="ef-exclusive-knob" style="position:absolute;top:3px;left:${e.exclusive?'21px':'3px'};width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.3);transition:left 0.2s"></div>
+              </div>
+            </label>
+            <input type="checkbox" id="ef-exclusive" ${e.exclusive?'checked':''} style="display:none">
+          </div>
           <div id="ef-invitee-section" style="${e.exclusive?'':'display:none'}">
             <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Select invitees</div>
-            <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;max-height:220px;overflow-y:auto">
+            <div style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;max-height:220px;overflow-y:auto;-webkit-overflow-scrolling:touch">
               ${members.map(m=>`
-                <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background 0.1s" onmouseover="this.style.background='var(--surface-alt)'" onmouseout="this.style.background=''">
-                  <input type="checkbox" data-uid="${m.uid}" class="ef-inv-cb" ${invitees[m.uid]?'checked':''} style="width:auto;min-width:0;padding:0;border:none;box-shadow:none;flex-shrink:0">
+                <label style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer;background:var(--surface)">
+                  <input type="checkbox" data-uid="${m.uid}" class="ef-inv-cb" ${invitees[m.uid]?'checked':''} style="width:18px;height:18px;min-width:18px;flex-shrink:0;cursor:pointer;accent-color:var(--accent)">
                   <div class="avatar" style="width:28px;height:28px;font-size:10px;flex-shrink:0">${initials(m.name)}</div>
-                  <div>
-                    <div style="font-size:13px;font-weight:600">${esc(m.name)}</div>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.name)}</div>
                     <div style="font-size:11px;color:var(--text-3)">${roleBadge(m.role)}</div>
                   </div>
                 </label>`).join('')}
             </div>
             <div style="display:flex;gap:8px;margin-top:8px">
-              <button class="btn btn-sm btn-ghost" onclick="invSelectAll(true)">Select all</button>
-              <button class="btn btn-sm btn-ghost" onclick="invSelectAll(false)">Deselect all</button>
+              <button class="btn btn-sm btn-ghost" type="button" onclick="invSelectAll(true)">Select all</button>
+              <button class="btn btn-sm btn-ghost" type="button" onclick="invSelectAll(false)">Deselect all</button>
             </div>
           </div>
         </div>` : ''}
@@ -2546,11 +2548,23 @@ window.toggleRecurUntil = v => {
   document.getElementById('recur-until-row').style.display = v==='none' ? 'none' : '';
 };
 window.toggleInviteeSection = function(checked) {
-  document.getElementById('ef-invitee-section').style.display = checked ? '' : 'none';
-  const track = document.getElementById('ef-exclusive-track');
-  const thumb = document.getElementById('ef-exclusive-thumb');
-  if (track) track.style.background = checked ? 'var(--accent)' : 'var(--border-strong)';
-  if (thumb) thumb.style.left = checked ? '21px' : '3px';
+  // Legacy — kept for safety, actual toggle now uses toggleExclusive()
+  toggleExclusive(checked);
+};
+window.toggleExclusive = function(forceState) {
+  const cb      = document.getElementById('ef-exclusive');
+  const section = document.getElementById('ef-invitee-section');
+  const toggle  = document.getElementById('ef-exclusive-toggle');
+  const knob    = document.getElementById('ef-exclusive-knob');
+  const label   = document.getElementById('ef-exclusive-label');
+  if (!cb) return;
+  // If forceState is passed use it, otherwise flip current state
+  const on = forceState !== undefined ? forceState : !cb.checked;
+  cb.checked = on;
+  if (section) section.style.display = on ? '' : 'none';
+  if (toggle)  toggle.style.background = on ? 'var(--accent)' : 'var(--border-strong)';
+  if (knob)    knob.style.left = on ? '21px' : '3px';
+  if (label)   label.style.borderColor = on ? 'var(--accent)' : 'var(--border)';
 };
 window.invSelectAll = function(state) {
   document.querySelectorAll('.ef-inv-cb').forEach(cb => cb.checked = state);
