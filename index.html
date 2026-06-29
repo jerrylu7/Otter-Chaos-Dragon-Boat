@@ -70,7 +70,7 @@ const EMAILJS_PUBLIC_KEY  = "H3Fg65VqbbAYUr3k7";
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #17171a; --surface: #222226; --surface-alt: #1c1c20;
     --border: #303038; --border-strong: #44444e;
     --text: #f0efe9; --text-2: #a09e98; --text-3: #606058;
@@ -80,6 +80,16 @@ const EMAILJS_PUBLIC_KEY  = "H3Fg65VqbbAYUr3k7";
     --warning: #e8a020; --warning-bg: #261c08; --warning-text: #f0c060;
     --race: #c084fc; --race-bg: #26154a; --race-text: #d8a8ff;
   }
+}
+:root[data-theme="dark"] {
+  --bg: #17171a; --surface: #222226; --surface-alt: #1c1c20;
+  --border: #303038; --border-strong: #44444e;
+  --text: #f0efe9; --text-2: #a09e98; --text-3: #606058;
+  --accent: #4a8de8; --accent-bg: #182840; --accent-text: #82b4f5;
+  --success: #34a85a; --success-bg: #0e2418; --success-text: #5dd880;
+  --danger: #e05545; --danger-bg: #2a100d; --danger-text: #f08878;
+  --warning: #e8a020; --warning-bg: #261c08; --warning-text: #f0c060;
+  --race: #c084fc; --race-bg: #26154a; --race-text: #d8a8ff;
 }
 
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 15px; line-height: 1.5; }
@@ -781,6 +791,9 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
       </div>
       <nav class="sidebar-nav" id="sb-nav"></nav>
       <div class="sidebar-user" id="sb-user"></div>
+      <div style="padding:8px 12px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <button id="theme-toggle-btn" onclick="cycleTheme()" title="Toggle dark/light/auto theme" style="background:none;border:none;cursor:pointer;font-size:18px;padding:4px 6px;border-radius:6px;color:var(--text-2);transition:background 0.1s" onmouseover="this.style.background='var(--surface-alt)'" onmouseout="this.style.background=''">🔆</button>
+      </div>
     </aside>
     <div class="main" id="main-content">
       <div class="mobile-topbar">
@@ -1013,6 +1026,10 @@ async function doRegister() {
 
 // ─── Boot ────────────────────────────────────────────────────────────────────
 function bootApp() {
+  // Apply saved theme
+  const savedTheme = localStorage.getItem('theme')||'auto';
+  applyTheme(savedTheme);
+
   buildSidebar();
   renderSidebarUser();
   restoreSidebarState();
@@ -1093,21 +1110,25 @@ function buildSidebar() {
 
   // ── Member-facing pages (visible to all) ──
   const memberPages = [
-    { id:'dashboard', icon:'🏠', label:'Dashboard',  badge:'dash-badge' },
-    { id:'races',     icon:'🏁', label:'Races' },
-    { id:'practices', icon:'🚣', label:'Practices' },
-    { id:'socials',   icon:'🦦', label:'Otter S.O.C.I.A.L' },
-    { id:'roster',    icon:'👥', label:'Roster' },
-    { id:'profile',   icon:'👤', label:'My Profile' },
+    { id:'dashboard',    icon:'🏠', label:'Dashboard',        badge:'dash-badge' },
+    { id:'races',        icon:'🏁', label:'Races' },
+    { id:'practices',    icon:'🚣', label:'Practices' },
+    { id:'socials',      icon:'🦦', label:'Otter S.O.C.I.A.L' },
+    { id:'announcements',icon:'📣', label:'Announcements',    badge:'ann-badge' },
+    { id:'raceday',      icon:'🏆', label:'Race Day' },
+    { id:'roster',       icon:'👥', label:'Roster' },
+    { id:'availability', icon:'📅', label:'Availability' },
+    { id:'profile',      icon:'👤', label:'My Profile' },
   ];
 
-  // ── Admin/Coach pages (hidden from paddlers) ──
   const adminPages = [
-    { id:'lineup',     icon:'📋', label:'Lineup' },
-    { id:'attendance', icon:'✅', label:'Attendance' },
-    { id:'reminders',  icon:'✉️',  label:'Reminders' },
-    { id:'approvals',  icon:'🔐', label:'Approvals',  adminOnly:true, badge:'approve-badge' },
-    { id:'settings',   icon:'⚙️',  label:'Settings',   adminOnly:true },
+    { id:'lineup',       icon:'📋', label:'Lineup' },
+    { id:'attendance',   icon:'✅', label:'Attendance' },
+    { id:'leaderboard',  icon:'🏅', label:'Leaderboard' },
+    { id:'season',       icon:'📊', label:'Season Summary' },
+    { id:'reminders',    icon:'✉️',  label:'Reminders' },
+    { id:'approvals',    icon:'🔐', label:'Approvals',    adminOnly:true, badge:'approve-badge' },
+    { id:'settings',     icon:'⚙️',  label:'Settings',    adminOnly:true },
   ];
 
   function addDivider(label) {
@@ -1144,6 +1165,14 @@ function buildSidebar() {
     if (badge) { badge.textContent = pending; badge.style.display = pending ? 'inline-flex' : 'none'; }
     if (mobBadge) mobBadge.style.display = pending ? 'block' : 'none';
   });
+  // Announcements unread badge
+  db.ref('announcements').on('value', snap => {
+    const badge = document.getElementById('ann-badge');
+    if (!badge) return;
+    const lastSeen = Number(localStorage.getItem('ann-last-seen')||0);
+    const unread = Object.values(snap.val()||{}).filter(a=>a.ts>lastSeen).length;
+    badge.textContent = unread; badge.style.display = unread ? 'inline-flex' : 'none';
+  });
   if (can.admin()) {
     db.ref('users').on('value', snap => {
       const badge = document.getElementById('approve-badge');
@@ -1153,6 +1182,23 @@ function buildSidebar() {
     });
   }
 }
+
+function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode==='dark')  root.setAttribute('data-theme','dark');
+  else if (mode==='light') root.setAttribute('data-theme','light');
+  else root.removeAttribute('data-theme');
+  localStorage.setItem('theme', mode);
+  // Update toggle icons if visible
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.textContent = mode==='dark'?'☀️':mode==='light'?'🌙':'🔆';
+}
+window.cycleTheme = function() {
+  const cur = localStorage.getItem('theme')||'auto';
+  const next = cur==='auto'?'dark':cur==='dark'?'light':'auto';
+  applyTheme(next);
+  showToast(next==='dark'?'Dark mode on':next==='light'?'Light mode on':'System theme','🎨');
+};
 
 function renderSidebarUser() {
   const p = currentProfile;
@@ -1188,18 +1234,23 @@ function restoreSidebarState() {
 }
 
 const PAGE_META = {
-  dashboard:  { title:'My dashboard',       sub:'Your upcoming events and RSVP status' },
-  races:      { title:'Races',              sub:'Upcoming and past race events' },
-  practices:  { title:'Practices',          sub:'Upcoming and past practice sessions' },
-  socials:    { title:'Otter S.O.C.I.A.L', sub:'Social events for the team' },
-  profile:    { title:'My Profile',         sub:'Your personal details and settings' },
-  roster:     { title:'Roster',             sub:'All team members' },
-  lineup:     { title:'Lineup',             sub:'Seat assignments for events' },
-  events:     { title:'Events',             sub:'All practices and races' },
-  attendance: { title:'Attendance',         sub:'Track who shows up' },
-  reminders:  { title:'Reminders',          sub:'Email members who haven\'t responded' },
-  approvals:  { title:'Approvals',          sub:'Manage member access and roles' },
-  settings:   { title:'Settings',           sub:'Team configuration' },
+  dashboard:     { title:'My dashboard',       sub:'Your upcoming events and RSVP status' },
+  races:         { title:'Races',              sub:'Upcoming and past race events' },
+  practices:     { title:'Practices',          sub:'Upcoming and past practice sessions' },
+  socials:       { title:'Otter S.O.C.I.A.L', sub:'Social events for the team' },
+  announcements: { title:'Announcements',      sub:'Team updates and notices' },
+  raceday:       { title:'Race Day',           sub:'Heats, assignments and results' },
+  availability:  { title:'My Availability',    sub:'Let coaches know when you\'re away' },
+  profile:       { title:'My Profile',         sub:'Your personal details and settings' },
+  roster:        { title:'Roster',             sub:'All team members' },
+  lineup:        { title:'Lineup',             sub:'Seat assignments for events' },
+  events:        { title:'Events',             sub:'All practices and races' },
+  attendance:    { title:'Attendance',         sub:'Track who shows up' },
+  leaderboard:   { title:'Leaderboard',        sub:'Top attendees this season' },
+  season:        { title:'Season Summary',     sub:'End-of-season stats for the team' },
+  reminders:     { title:'Reminders',          sub:'Email members who haven\'t responded' },
+  approvals:     { title:'Approvals',          sub:'Manage member access and roles' },
+  settings:      { title:'Settings',           sub:'Team configuration' },
 };
 
 function navigate(page) {
@@ -1228,7 +1279,11 @@ function navigate(page) {
     }
   }, 8000);
   syncMobActions();
-  ({ dashboard:pgDashboard, races:pgRaces, practices:pgPractices, socials:pgSocials, profile:pgProfile, roster:pgRoster, lineup:pgLineup, events:pgEvents, attendance:pgAttendance, reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
+  ({ dashboard:pgDashboard, races:pgRaces, practices:pgPractices, socials:pgSocials,
+     announcements:pgAnnouncements, raceday:pgRaceDay, availability:pgAvailability,
+     profile:pgProfile, roster:pgRoster, lineup:pgLineup, events:pgEvents,
+     attendance:pgAttendance, leaderboard:pgLeaderboard, season:pgSeasonSummary,
+     reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
 }
 
 // Mirror desktop action buttons into the mobile actions bar
@@ -1626,6 +1681,7 @@ window.openEventDetail = function(evId, domEvent) {
       <div class="ev-detail-tabs">
         <button class="ev-detail-tab active" id="edt-rsvp" onclick="evDetailTab('rsvp','${evId}')">RSVP</button>
         <button class="ev-detail-tab" id="edt-lineup" onclick="evDetailTab('lineup','${evId}')">Lineup</button>
+        ${can.edit()?`<button class="ev-detail-tab" id="edt-bulk" onclick="openBulkRsvp('${evId}')">Bulk RSVP</button>`:''}
         ${can.edit()?`<button class="ev-detail-tab" id="edt-manage" onclick="evDetailTab('manage','${evId}')">Manage</button>`:''}
       </div>
 
@@ -1726,8 +1782,24 @@ function renderEvDetailLineup(evId, ev, members, lineup) {
     rows += seatEl(`row${r}_right`, `Row ${r} R`);
   }
 
+  // Balance stats
+  const bal = lineupSideBalance(lineup, members);
+  const balPanel = (bal.lCount||bal.rCount) ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+    <div style="background:var(--accent-bg);border:1px solid var(--accent);border-radius:var(--radius);padding:8px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;margin-bottom:2px">Left</div>
+      <div style="font-size:18px;font-weight:800;color:var(--accent-text)">${bal.lCount}</div>
+      ${bal.lW?`<div style="font-size:11px;color:var(--text-3)">${bal.lW} lbs</div>`:''}
+    </div>
+    <div style="background:var(--success-bg);border:1px solid var(--success);border-radius:var(--radius);padding:8px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;margin-bottom:2px">Right</div>
+      <div style="font-size:18px;font-weight:800;color:var(--success-text)">${bal.rCount}</div>
+      ${bal.rW?`<div style="font-size:11px;color:var(--text-3)">${bal.rW} lbs</div>`:''}
+    </div>
+  </div>${bal.wImbalance>30?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--warning-text);margin-bottom:10px">⚖️ ${bal.wImbalance} lbs imbalance between sides</div>`:''}` : '';
+
   body.innerHTML = `
     ${!ed?'<div class="readonly-notice" style="margin-bottom:12px">👁 View only — coaches and admins can edit the lineup.</div>':''}
+    ${balPanel}
     <div class="boat-visual" style="margin-bottom:12px;padding:14px">
       <div class="boat-section-title" style="font-size:13px">🥁 Drummer</div>
       ${seatEl('drummer','Drummer')}
@@ -1931,7 +2003,105 @@ function navigatePendingRsvp() {
   });
 }
 
-// RSVP directly from dashboard card
+// ── RSVP deadline check ───────────────────────────────────────────────────────
+async function isRsvpLocked(ev) {
+  if(can.edit()) return false; // coaches/admins can always RSVP
+  const snap = await db.ref('settings/rsvpDeadlineHours').get();
+  const hours = snap.val();
+  if(!hours||!ev.date) return false;
+  const eventDate = new Date((ev.date+(ev.time?' '+ev.time:' 23:59')).replace(' ','T'));
+  const deadline = new Date(eventDate.getTime() - hours*3600000);
+  return new Date() > deadline;
+}
+
+// ── Bulk RSVP (coaches only) ──────────────────────────────────────────────────
+window.openBulkRsvp = async function(evId) {
+  if(!can.edit())return;
+  closeModal();
+  const [evSnap,uSnap]=await Promise.all([db.ref('events/'+evId).get(),db.ref('users').get()]);
+  const ev=evSnap.val(); if(!ev)return;
+  const members=Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+  const overlay=document.createElement('div');overlay.className='overlay';
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+  overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+    <div class="modal-header" style="flex-shrink:0">
+      <div><div class="modal-title">Bulk RSVP</div><div class="modal-sub">${esc(ev.name)} · ${fmtDate(ev.date)}</div></div>
+      <button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">Set RSVP on behalf of members who don't use the app.</div>
+      ${members.map(m=>{
+        const r=(ev.rsvps||{})[m.uid]||'none';
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div class="avatar" style="flex-shrink:0">${initials(m.name)}</div>
+          <div style="flex:1;font-size:14px;font-weight:600">${esc(m.name)}</div>
+          <div style="display:flex;gap:4px">
+            <button class="rsvp-action-btn ${r==='yes'?'selected-yes':''}" style="padding:5px 10px;font-size:12px" onclick="setBulkRsvp('${evId}','${m.uid}','yes',this)">✓</button>
+            <button class="rsvp-action-btn ${r==='no'?'selected-no':''}" style="padding:5px 10px;font-size:12px" onclick="setBulkRsvp('${evId}','${m.uid}','no',this)">✗</button>
+            <button class="rsvp-action-btn ${r==='none'?'selected-none':''}" style="padding:5px 10px;font-size:12px" onclick="setBulkRsvp('${evId}','${m.uid}',null,this)">—</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="modal-footer" style="flex-shrink:0"><button class="btn btn-primary" onclick="closeModal()">Done</button></div>
+  </div>`;
+  document.body.appendChild(overlay);modalEl=overlay;
+};
+
+window.setBulkRsvp=async function(evId,memberUid,val,btn){
+  if(val) await db.ref('events/'+evId+'/rsvps/'+memberUid).set(val);
+  else await db.ref('events/'+evId+'/rsvps/'+memberUid).remove();
+  // Visual feedback
+  btn.closest('div').querySelectorAll('.rsvp-action-btn').forEach(b=>{b.classList.remove('selected-yes','selected-no','selected-none');});
+  if(val==='yes')btn.classList.add('selected-yes');
+  else if(val==='no')btn.classList.add('selected-no');
+  else btn.classList.add('selected-none');
+};
+
+// ── Register service worker for offline caching ───────────────────────────────
+if('serviceWorker' in navigator) {
+  window.addEventListener('load', ()=>{
+    // Inline service worker as a blob since we're single-file
+    const swCode=`
+self.addEventListener('install',e=>e.waitUntil(
+  caches.open('otterchaos-v1').then(c=>c.addAll([location.pathname]))
+));
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{
+    if(res.ok){const c=res.clone();caches.open('otterchaos-v1').then(ca=>ca.put(e.request,c));}
+    return res;
+  }).catch(()=>caches.match(location.pathname))));
+});`;
+    const blob=new Blob([swCode],{type:'application/javascript'});
+    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+  });
+}
+
+// ── Paddle side balance in lineup ─────────────────────────────────────────────
+function lineupSideBalance(lineup, members) {
+  const keys=Object.entries(lineup||{});
+  let lCount=0,rCount=0,lW=0,rW=0;
+  keys.forEach(([k,uid])=>{
+    if(!uid)return;
+    const m=members.find(x=>x.uid===uid);
+    const w=Number(m?.weight||0);
+    if(k.includes('left')){lCount++;lW+=w;}
+    else if(k.includes('right')){rCount++;rW+=w;}
+  });
+  const totalW=lW+rW;
+  const wImbalance=lW&&rW?Math.abs(lW-rW):0;
+  return {lCount,rCount,lW,rW,totalW,wImbalance};
+}
+
+// Expose bulk RSVP in event detail manage tab
+const _origEvDetailTab=window.evDetailTab;
+window.evDetailTab=function(tab,evId){
+  _origEvDetailTab(tab,evId);
+  if(tab==='manage'&&can.edit()){
+    // Add bulk RSVP button after reopening modal would have closed it — handled in manage tab inline
+  }
+};
 window.dashRsvp = async function(evId, val, btn) {
   const uid = currentUser.uid;
 
@@ -2361,6 +2531,7 @@ function pgRoster() {
         <div class="metric"><div class="metric-label">Can paddle Right</div><div class="metric-value">${rc}</div></div>
         <div class="metric"><div class="metric-label">Avg weight</div><div class="metric-value">${avgW}<span style="font-size:16px;font-weight:400"> lbs</span></div></div>
       </div>
+      ${Math.abs(lc-rc)>4?`<div class="readonly-notice" style="background:var(--warning-bg);border-color:var(--warning);color:var(--warning-text)">⚖️ Paddle side imbalance: ${Math.abs(lc-rc)} more ${lc>rc?'left':'right'}-side paddlers. Consider recruiting for the ${lc>rc?'right':'left'} side.</div>`:''}
       ${!can.admin()?'<div class="readonly-notice">👁 Click any member name to view their profile and add coaching notes or media.</div>':''}
       <div class="table-wrap"><table>
         <thead><tr><th>Member</th><th>App role</th><th>Sides</th><th>Positions</th><th>Weight</th><th>Emergency contact</th>${can.admin()?'<th></th>':''}</tr></thead>
@@ -3440,7 +3611,12 @@ function pgSettings() {
         <div class="form-group">
           <label class="form-label">Minimum attendance threshold (%)</label>
           <input id="s-threshold" type="number" min="0" max="100" value="${esc(s.attendanceThreshold||'')}" placeholder="e.g. 75">
-          <div style="font-size:12px;color:var(--text-3);margin-top:4px">Paddlers below this practice attendance % will see a warning on their profile. 0%–60% of threshold = 🔴 red, 60%–80% = 🟡 yellow, 80%–100% = 🟢 green. Leave blank to disable.</div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:4px">Paddlers below this practice attendance % will see a warning. Leave blank to disable.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">RSVP deadline (hours before event)</label>
+          <input id="s-rsvp-deadline" type="number" min="0" max="168" value="${esc(s.rsvpDeadlineHours||'')}" placeholder="e.g. 48">
+          <div style="font-size:12px;color:var(--text-3);margin-top:4px">RSVPs will lock this many hours before an event starts. Leave blank to never lock.</div>
         </div>
         <div class="form-group">
           <label class="form-label">Team logo</label>
@@ -3514,9 +3690,13 @@ window.saveSettings = async () => {
   const logoUrl = document.getElementById('s-logo-url').value.trim();
   const threshRaw = document.getElementById('s-threshold')?.value?.trim();
   const attendanceThreshold = threshRaw ? Number(threshRaw) : null;
+  const deadlineRaw = document.getElementById('s-rsvp-deadline')?.value?.trim();
+  const rsvpDeadlineHours = deadlineRaw ? Number(deadlineRaw) : null;
   const settingsUpdate = { teamName: name, logoUrl: logoUrl||'' };
   if (attendanceThreshold !== null) settingsUpdate.attendanceThreshold = attendanceThreshold;
   else settingsUpdate.attendanceThreshold = null;
+  if (rsvpDeadlineHours !== null) settingsUpdate.rsvpDeadlineHours = rsvpDeadlineHours;
+  else settingsUpdate.rsvpDeadlineHours = null;
   await db.ref('settings').update(settingsUpdate);
   applyLogo(logoUrl);
   showToast('Settings saved','✓');
@@ -3526,6 +3706,474 @@ window.saveSettings = async () => {
 function openSidebar()  { document.getElementById('sidebar').classList.add('mob-open');    document.getElementById('mobOverlay').classList.add('open'); }
 function closeSidebar() { document.getElementById('sidebar').classList.remove('mob-open'); document.getElementById('mobOverlay').classList.remove('open'); }
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ANNOUNCEMENTS
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgAnnouncements() {
+  const C = document.getElementById('pg-content');
+  const A = document.getElementById('pg-actions');
+  // Mark all as seen
+  localStorage.setItem('ann-last-seen', Date.now());
+  const badge = document.getElementById('ann-badge');
+  if (badge) { badge.textContent='0'; badge.style.display='none'; }
+
+  if (can.edit()) {
+    const b = document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Post announcement'; b.onclick=openAnnouncementModal; A.appendChild(b);
+  }
+
+  db.ref('announcements').on('value', snap => {
+    const items = Object.entries(snap.val()||{}).sort((a,b)=>b[1].ts-a[1].ts);
+    if (!items.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">📣</div><div class="empty-title">No announcements yet</div><div class="empty-sub">Coaches can post updates, reminders and notices here.</div></div></div>`; return; }
+    C.innerHTML = items.map(([key,a])=>`
+      <div class="card" style="padding:20px;margin-bottom:12px;border-left:4px solid ${a.pinned?'var(--warning)':'var(--accent)'}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            ${a.pinned?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text)">📌 Pinned</span>':''}
+            ${a.urgent?'<span class="badge" style="background:var(--danger-bg);color:var(--danger-text)">🚨 Urgent</span>':''}
+            <span style="font-size:12px;color:var(--text-3)">${a.authorName||'Coach'} · ${new Date(a.ts).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'})}</span>
+          </div>
+          ${can.edit()?`<div style="display:flex;gap:4px;flex-shrink:0">
+            <button class="btn btn-sm btn-ghost" onclick="toggleAnnPin('${key}',${!!a.pinned})">${a.pinned?'Unpin':'📌 Pin'}</button>
+            <button class="btn btn-sm btn-danger btn-ghost" onclick="deleteAnn('${key}')">✕</button>
+          </div>`:''}
+        </div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:6px">${esc(a.title)}</div>
+        <div style="font-size:14px;color:var(--text-2);white-space:pre-wrap;line-height:1.6">${esc(a.body)}</div>
+      </div>`).join('');
+  });
+}
+
+function openAnnouncementModal() {
+  closeModal();
+  const overlay=document.createElement('div'); overlay.className='overlay';
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+  overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+    <div class="modal-header" style="flex-shrink:0"><div class="modal-title">📣 Post announcement</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div class="form-group"><label class="form-label">Title *</label><input id="ann-title" placeholder="Practice location change"></div>
+      <div class="form-group"><label class="form-label">Message *</label><textarea id="ann-body" style="min-height:120px;resize:vertical" placeholder="Details…"></textarea></div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="ann-pinned" style="width:auto;padding:0;border:none;box-shadow:none;accent-color:var(--accent)"> 📌 Pin to top</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="ann-urgent" style="width:auto;padding:0;border:none;box-shadow:none;accent-color:var(--danger)"> 🚨 Mark urgent</label>
+      </div>
+    </div>
+    <div class="modal-footer" style="flex-shrink:0"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="postAnnouncement()">Post</button></div>
+  </div>`;
+  document.body.appendChild(overlay); modalEl=overlay;
+  setTimeout(()=>overlay.querySelector('#ann-title')?.focus(),200);
+}
+
+window.postAnnouncement = async function() {
+  const title=document.getElementById('ann-title')?.value?.trim();
+  const body=document.getElementById('ann-body')?.value?.trim();
+  if(!title||!body){showToast('Title and message required','⚠️');return;}
+  const pinned=document.getElementById('ann-pinned')?.checked||false;
+  const urgent=document.getElementById('ann-urgent')?.checked||false;
+  const key=db.ref('announcements').push().key;
+  await db.ref('announcements/'+key).set({title,body,pinned,urgent,ts:Date.now(),authorName:currentProfile.name,authorUid:currentUser.uid});
+  closeModal(); showToast('Announcement posted 📣');
+};
+window.deleteAnn=async function(key){if(!confirm('Delete this announcement?'))return;await db.ref('announcements/'+key).remove();showToast('Deleted','🗑');};
+window.toggleAnnPin=async function(key,cur){await db.ref('announcements/'+key+'/pinned').set(!cur);};
+
+// Also show pinned announcements in a banner on dashboard
+function renderAnnouncementBanner() {
+  db.ref('announcements').orderByChild('pinned').equalTo(true).get().then(snap=>{
+    const existing=document.getElementById('ann-dashboard-banner');
+    if(existing)existing.remove();
+    if(!snap.exists())return;
+    const items=Object.values(snap.val()||{}).filter(a=>a.pinned).sort((a,b)=>b.ts-a.ts).slice(0,3);
+    if(!items.length)return;
+    const C=document.getElementById('pg-content');
+    if(!C)return;
+    const banner=document.createElement('div'); banner.id='ann-dashboard-banner';
+    banner.innerHTML=items.map(a=>`<div style="background:${a.urgent?'var(--danger-bg)':'var(--warning-bg)'};border:1px solid ${a.urgent?'var(--danger)':'var(--warning)'};border-radius:10px;padding:12px 16px;margin-bottom:10px;cursor:pointer" onclick="navigate('announcements')">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px"><span>${a.urgent?'🚨':'📌'}</span><strong style="font-size:14px">${esc(a.title)}</strong></div>
+      <div style="font-size:13px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.body)}</div>
+    </div>`).join('');
+    C.prepend(banner);
+  }).catch(()=>{});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RACE DAY
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgRaceDay() {
+  const C = document.getElementById('pg-content');
+  const A = document.getElementById('pg-actions');
+  if (can.edit()) {
+    const b=document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Add heat'; b.onclick=()=>openHeatModal(null,null); A.appendChild(b);
+  }
+  db.ref('events').orderByChild('type').equalTo('Race').get().then(evSnap=>{
+    const races = Object.values(evSnap.val()||{}).sort((a,b)=>b.date.localeCompare(a.date));
+    if(!races.length){C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No races yet</div><div class="empty-sub">Add race events first, then manage heats and results here.</div></div></div>`;return;}
+
+    // Race selector
+    const sel=document.createElement('div'); sel.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap';
+    sel.innerHTML=`<label style="font-size:14px;font-weight:700;color:var(--text-2)">Race:</label>
+      <select id="rd-race-sel" style="max-width:300px">${races.map(r=>`<option value="${r.id}">${esc(r.name)} — ${fmtDate(r.date)}</option>`).join('')}</select>`;
+    C.prepend(sel);
+    C.innerHTML='';
+    C.appendChild(sel);
+    document.getElementById('rd-race-sel').onchange=function(){loadRaceDayDetail(this.value);};
+    loadRaceDayDetail(races[0].id);
+  });
+}
+
+function loadRaceDayDetail(raceId) {
+  const C=document.getElementById('pg-content');
+  const existing=document.getElementById('rd-detail');
+  if(existing)existing.remove();
+  Promise.all([
+    db.ref('events/'+raceId).get(),
+    db.ref('raceHeats/'+raceId).get(),
+    db.ref('users').get(),
+  ]).then(([evSnap,heatSnap,uSnap])=>{
+    const ev=evSnap.val(); if(!ev)return;
+    const heats=Object.entries(heatSnap.val()||{}).sort((a,b)=>a[1].order-b[1].order);
+    const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&(ev.rsvps||{})[u.uid]==='yes').sort((a,b)=>a.name.localeCompare(b.name));
+    const detail=document.createElement('div'); detail.id='rd-detail';
+    detail.innerHTML=`
+      <div class="metric-grid" style="margin-bottom:20px">
+        <div class="metric"><div class="metric-label">Date</div><div class="metric-value" style="font-size:18px">${fmtDateS(ev.date)}</div></div>
+        <div class="metric"><div class="metric-label">Location</div><div class="metric-value" style="font-size:16px">${esc(ev.location||'—')}</div></div>
+        <div class="metric"><div class="metric-label">Confirmed going</div><div class="metric-value" style="color:var(--success)">${members.length}</div></div>
+        <div class="metric"><div class="metric-label">Heats</div><div class="metric-value">${heats.length}</div></div>
+      </div>
+
+      ${heats.length?heats.map(([hk,h])=>`
+        <div class="card" style="padding:20px;margin-bottom:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+            <div>
+              <div style="font-size:16px;font-weight:700">${esc(h.name)}</div>
+              <div style="font-size:13px;color:var(--text-3)">${h.time?'⏰ '+fmtTime(h.time):''} ${h.division?'· '+esc(h.division):''}</div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              ${h.result?`<span class="badge" style="background:var(--success-bg);color:var(--success-text);font-size:13px">🏆 ${esc(h.result)}</span>`:''}
+              ${can.edit()?`<button class="btn btn-sm btn-ghost" onclick="openHeatModal('${raceId}','${hk}')">Edit</button>
+              <button class="btn btn-sm btn-danger btn-ghost" onclick="deleteHeat('${raceId}','${hk}')">✕</button>`:''}
+            </div>
+          </div>
+          ${h.notes?`<div style="font-size:13px;color:var(--text-2);background:var(--surface-alt);padding:10px 12px;border-radius:var(--radius);margin-top:8px;white-space:pre-wrap">${esc(h.notes)}</div>`:''}
+        </div>`).join('')
+        :`<div class="card" style="padding:20px;text-align:center;color:var(--text-3)">No heats added yet.${can.edit()?' Click <strong>Add heat</strong> above to get started.':''}</div>`}
+
+      ${can.edit()?`<div class="card" style="padding:20px;margin-top:8px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:10px">Race day roster — ${members.length} confirmed</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${members.map(m=>`<div style="display:flex;align-items:center;gap:6px;background:var(--surface-alt);border-radius:20px;padding:5px 10px 5px 6px"><div class="avatar" style="width:24px;height:24px;font-size:9px">${initials(m.name)}</div><span style="font-size:13px">${esc(m.name)}</span></div>`).join('')}</div>
+      </div>`:''}`;
+    C.appendChild(detail);
+  });
+}
+
+function openHeatModal(raceId, heatKey) {
+  if(!can.edit())return;
+  const isNew=!heatKey;
+  // Get race from selector
+  const selRaceId=raceId||document.getElementById('rd-race-sel')?.value;
+  if(!selRaceId){showToast('Select a race first','⚠️');return;}
+  const loadH=heatKey?db.ref('raceHeats/'+selRaceId+'/'+heatKey).get():Promise.resolve({val:()=>null});
+  loadH.then(snap=>{
+    const h=snap.val()||{};
+    closeModal();
+    const overlay=document.createElement('div');overlay.className='overlay';
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+    overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+      <div class="modal-header" style="flex-shrink:0"><div class="modal-title">${isNew?'Add heat':'Edit heat'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+      <div class="modal-body" style="overflow-y:auto;flex:1">
+        <div class="form-group"><label class="form-label">Heat name *</label><input id="ht-name" value="${esc(h.name||'')}" placeholder="200m Mixed Open A Final"></div>
+        <div class="form-group"><label class="form-label">Division/Category</label><input id="ht-div" value="${esc(h.division||'')}" placeholder="Mixed Open, Women's 200m…"></div>
+        <div class="form-group"><label class="form-label">Start time</label><input id="ht-time" type="time" value="${esc(h.time||'')}"></div>
+        <div class="form-group"><label class="form-label">Result / Placing</label><input id="ht-result" value="${esc(h.result||'')}" placeholder="1st place, 2:34.5…"></div>
+        <div class="form-group"><label class="form-label">Notes</label><textarea id="ht-notes" style="min-height:80px;resize:vertical" placeholder="Warm-up plan, special instructions…">${esc(h.notes||'')}</textarea></div>
+      </div>
+      <div class="modal-footer" style="flex-shrink:0"><button class="btn" onclick="closeModal()">Cancel</button><button class="btn btn-primary" onclick="saveHeat('${selRaceId}','${heatKey||''}')">Save</button></div>
+    </div>`;
+    document.body.appendChild(overlay);modalEl=overlay;
+    setTimeout(()=>overlay.querySelector('#ht-name')?.focus(),200);
+  });
+}
+window.saveHeat=async function(raceId,heatKey){
+  const name=document.getElementById('ht-name')?.value?.trim();
+  if(!name){showToast('Heat name required','⚠️');return;}
+  const key=heatKey||db.ref('raceHeats/'+raceId).push().key;
+  await db.ref('raceHeats/'+raceId+'/'+key).set({
+    name,division:document.getElementById('ht-div').value.trim(),
+    time:document.getElementById('ht-time').value,
+    result:document.getElementById('ht-result').value.trim(),
+    notes:document.getElementById('ht-notes').value.trim(),
+    order:Date.now(),
+  });
+  closeModal();showToast('Heat saved ✓');loadRaceDayDetail(raceId);
+};
+window.deleteHeat=async function(raceId,heatKey){if(!confirm('Delete this heat?'))return;await db.ref('raceHeats/'+raceId+'/'+heatKey).remove();showToast('Deleted','🗑');loadRaceDayDetail(raceId);};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AVAILABILITY CALENDAR
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgAvailability() {
+  const C=document.getElementById('pg-content');
+  const uid=currentUser.uid;
+  Promise.all([db.ref('availability/'+uid).get(),db.ref('users').get()]).then(([avSnap,uSnap])=>{
+    const avail=avSnap.val()||{};
+    const members=can.edit()?Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name)):[];
+
+    C.innerHTML=`
+      <div class="card" style="padding:20px;margin-bottom:16px;max-width:600px">
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px">Mark your unavailability</div>
+        <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">Coaches can see when you're away when planning lineups.</div>
+        <div class="form-group">
+          <label class="form-label">Away from *</label>
+          <input type="date" id="av-from" value="">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Away until *</label>
+          <input type="date" id="av-to" value="">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reason (optional)</label>
+          <input id="av-reason" placeholder="Vacation, injury, work…">
+        </div>
+        <button class="btn btn-primary" onclick="addAvailability('${uid}')">Add unavailability</button>
+      </div>
+
+      <div style="max-width:600px">
+        <div class="dash-section-title">My unavailable periods</div>
+        <div id="av-my-list"></div>
+      </div>
+
+      ${can.edit()?`<div style="max-width:720px;margin-top:24px">
+        <div class="dash-section-title">Team availability overview</div>
+        <div id="av-team-list"></div>
+      </div>`:''}`;
+
+    renderAvailabilityList(avail, uid, 'av-my-list', true);
+    if(can.edit()){
+      db.ref('availability').get().then(allSnap=>{
+        const allAv=allSnap.val()||{};
+        const now=today();
+        let html='';
+        Object.entries(allAv).forEach(([mUid,periods])=>{
+          const m=members.find(x=>x.uid===mUid); if(!m)return;
+          const upcoming=Object.entries(periods||{}).filter(([,p])=>p.to>=now).sort((a,b)=>a[1].from.localeCompare(b[1].from));
+          if(!upcoming.length)return;
+          html+=`<div style="margin-bottom:12px"><div style="font-weight:600;font-size:14px;margin-bottom:4px">${esc(m.name)}</div>
+            ${upcoming.map(([,p])=>`<div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;font-size:13px;margin-bottom:4px">
+              📅 ${fmtDate(p.from)} → ${fmtDate(p.to)}${p.reason?' — '+esc(p.reason):''}
+            </div>`).join('')}</div>`;
+        });
+        document.getElementById('av-team-list').innerHTML=html||'<div style="color:var(--text-3);font-size:13px">No upcoming unavailability reported.</div>';
+      });
+    }
+  });
+}
+
+function renderAvailabilityList(avail,uid,containerId,canDelete) {
+  const el=document.getElementById(containerId); if(!el)return;
+  const now=today();
+  const items=Object.entries(avail).filter(([,p])=>p.to>=now).sort((a,b)=>a[1].from.localeCompare(b[1].from));
+  el.innerHTML=items.length?items.map(([key,p])=>`<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:10px 14px;margin-bottom:6px;gap:10px">
+    <div>
+      <div style="font-size:14px;font-weight:600">📅 ${fmtDate(p.from)} → ${fmtDate(p.to)}</div>
+      ${p.reason?`<div style="font-size:12px;color:var(--text-3)">${esc(p.reason)}</div>`:''}
+    </div>
+    ${canDelete?`<button class="btn btn-sm btn-ghost btn-danger" onclick="deleteAvailability('${uid}','${key}')">✕</button>`:''}
+  </div>`).join(''):`<div style="color:var(--text-3);font-size:13px;padding:8px 0">No unavailability set. You're good to go!</div>`;
+}
+
+window.addAvailability=async function(uid){
+  const from=document.getElementById('av-from')?.value;
+  const to=document.getElementById('av-to')?.value;
+  const reason=document.getElementById('av-reason')?.value?.trim();
+  if(!from||!to){showToast('Start and end date required','⚠️');return;}
+  if(to<from){showToast('End date must be after start','⚠️');return;}
+  const key=db.ref('availability/'+uid).push().key;
+  await db.ref('availability/'+uid+'/'+key).set({from,to,reason:reason||''});
+  showToast('Unavailability saved ✓');pgAvailability();
+};
+window.deleteAvailability=async function(uid,key){await db.ref('availability/'+uid+'/'+key).remove();showToast('Removed','🗑');pgAvailability();};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LEADERBOARD
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgLeaderboard() {
+  const C=document.getElementById('pg-content');
+  const uid=currentUser.uid;
+  Promise.all([db.ref('users').get(),db.ref('events').get()]).then(([uSnap,evSnap])=>{
+    const members=Object.values(uSnap.val()||{}).filter(u=>u.approved);
+    const events=Object.values(evSnap.val()||{}).filter(e=>e.date<today());
+    const practices=events.filter(e=>e.type==='Practice');
+    const races=events.filter(e=>e.type==='Race');
+
+    // Compute stats per member
+    const stats=members.map(m=>{
+      const pAtt=practices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+      const rAtt=races.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+      const total=events.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+      const pPct=practices.length?Math.round(pAtt/practices.length*100):0;
+
+      // Streak — consecutive practices attended (most recent first)
+      const practicesSorted=[...practices].sort((a,b)=>b.date.localeCompare(a.date));
+      let streak=0;
+      for(const ev of practicesSorted){if((ev.rsvps||{})[m.uid]==='yes')streak++;else break;}
+
+      return {...m,pAtt,rAtt,total,pPct,streak};
+    });
+
+    // Award badges
+    const maxStreak=Math.max(...stats.map(s=>s.streak),0);
+    const maxPract=Math.max(...stats.map(s=>s.pAtt),0);
+    const maxRaces=Math.max(...stats.map(s=>s.rAtt),0);
+
+    function badges(s){
+      const b=[];
+      if(s.pPct===100&&s.pAtt>=5)b.push('💯 Perfect');
+      if(s.streak>=5)b.push('🔥 On fire');
+      if(s.streak===maxStreak&&maxStreak>0)b.push('⚡ Streak king');
+      if(s.pAtt===maxPract&&maxPract>0)b.push('🚣 Practice champ');
+      if(s.rAtt===maxRaces&&maxRaces>0&&maxRaces>1)b.push('🏁 Race veteran');
+      if(s.pAtt>=10)b.push('🌟 10+ practices');
+      if(s.total>=20)b.push('👑 20+ events');
+      return b;
+    }
+
+    // Sort by practice attendance %
+    const ranked=[...stats].sort((a,b)=>b.pPct-a.pPct||b.pAtt-a.pAtt);
+
+    C.innerHTML=`
+      <div class="dash-section-title">🚣 Practice attendance ranking</div>
+      <div class="card" style="padding:0;margin-bottom:20px;overflow:hidden">
+        ${ranked.map((s,i)=>{
+          const isMe=s.uid===uid;
+          const medal=i===0?'🥇':i===1?'🥈':i===2?'🥉':'';
+          const bs=badges(s);
+          return `<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);${isMe?'background:var(--accent-bg)':''}">
+            <div style="width:32px;text-align:center;font-size:${medal?'20px':'14px'};font-weight:700;color:var(--text-3);flex-shrink:0">${medal||'#'+(i+1)}</div>
+            <div class="avatar">${initials(s.name)}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:14px">${esc(s.name)}${isMe?' <span style="font-size:11px;color:var(--accent)">(you)</span>':''}</div>
+              <div style="font-size:12px;color:var(--text-3)">${s.pAtt}/${practices.length} practices · ${s.streak} streak · ${s.rAtt} races</div>
+              ${bs.length?`<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${bs.map(b=>`<span style="font-size:10px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;padding:1px 7px">${b}</span>`).join('')}</div>`:''}
+            </div>
+            <div style="font-size:22px;font-weight:800;color:${pctColor(s.pPct)};flex-shrink:0">${s.pPct}%</div>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <div class="dash-section-title">🏅 Milestone badges</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:20px">
+        ${[
+          {icon:'💯',name:'Perfect attendance',desc:'100% practice attendance (5+ practices)'},
+          {icon:'🔥',name:'On fire',desc:'5+ practice streak'},
+          {icon:'⚡',name:'Streak king',desc:'Longest current streak'},
+          {icon:'🚣',name:'Practice champ',desc:'Most practices attended'},
+          {icon:'🏁',name:'Race veteran',desc:'Most races attended'},
+          {icon:'🌟',name:'10+ practices',desc:'Attended 10 or more practices'},
+          {icon:'👑',name:'20+ events',desc:'Attended 20+ total events'},
+        ].map(b=>`<div class="card" style="padding:14px;display:flex;align-items:flex-start;gap:10px">
+          <div style="font-size:24px;flex-shrink:0">${b.icon}</div>
+          <div><div style="font-size:13px;font-weight:700">${b.name}</div><div style="font-size:11px;color:var(--text-3);margin-top:2px">${b.desc}</div></div>
+        </div>`).join('')}
+      </div>`;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SEASON SUMMARY
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgSeasonSummary() {
+  if(!can.view()){navigate('dashboard');return;}
+  const C=document.getElementById('pg-content');
+  const A=document.getElementById('pg-actions');
+
+  // PDF export button for admins/coaches
+  if(can.edit()){
+    const b=document.createElement('button');b.className='btn';b.innerHTML='⬇ Export PDF';b.onclick=exportSeasonPDF;A.appendChild(b);
+  }
+
+  Promise.all([db.ref('users').get(),db.ref('events').get()]).then(([uSnap,evSnap])=>{
+    const members=Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+    const events=Object.values(evSnap.val()||{}).filter(e=>e.date<today()).sort((a,b)=>a.date.localeCompare(b.date));
+    const practices=events.filter(e=>e.type==='Practice');
+    const races=events.filter(e=>e.type==='Race');
+    const socials=events.filter(e=>e.type==='Otter S.O.C.I.A.L');
+
+    const teamAvg=members.length?Math.round(members.reduce((a,m)=>{
+      const att=practices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+      return a+(practices.length?att/practices.length*100:0);
+    },0)/members.length):0;
+
+    const memberCards=members.map(m=>{
+      const pA=practices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+      const rA=races.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+      const sA=socials.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+      const pPct=practices.length?Math.round(pA/practices.length*100):null;
+      const practicesSorted=[...practices].sort((a,b)=>b.date.localeCompare(a.date));
+      let streak=0;for(const ev of practicesSorted){if((ev.rsvps||{})[m.uid]==='yes')streak++;else break;}
+      const trend=pPct!==null?(pPct>=80?'↑':pPct>=50?'→':'↓'):'—';
+      return `<div class="card" style="padding:16px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <div class="avatar">${initials(m.name)}</div>
+          <div>
+            <div style="font-weight:700;font-size:14px">${esc(m.name)}</div>
+            <div style="font-size:11px;color:var(--text-3)">${roleBadge(m.role)}</div>
+          </div>
+          <div style="margin-left:auto;font-size:20px;font-weight:800;color:${pPct===null?'var(--text-3)':pPct>=80?'var(--success)':pPct>=50?'var(--warning)':'var(--danger)'}">${pPct!==null?pPct+'%':'—'}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px;text-align:center">
+          <div style="background:var(--surface-alt);border-radius:var(--radius);padding:8px"><div style="font-weight:700;font-size:16px;color:var(--accent)">${pA}</div><div style="color:var(--text-3)">Practices</div></div>
+          <div style="background:var(--surface-alt);border-radius:var(--radius);padding:8px"><div style="font-weight:700;font-size:16px;color:var(--race)">${rA}</div><div style="color:var(--text-3)">Races</div></div>
+          <div style="background:var(--surface-alt);border-radius:var(--radius);padding:8px"><div style="font-weight:700;font-size:16px;color:#b45309">${sA}</div><div style="color:var(--text-3)">Socials</div></div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-3)">🔥 Streak: ${streak} · Trend: <strong>${trend}</strong></div>
+      </div>`;
+    }).join('');
+
+    C.innerHTML=`
+      <div id="season-export-area">
+        <div class="metric-grid" style="margin-bottom:20px">
+          <div class="metric"><div class="metric-label">Total practices</div><div class="metric-value">${practices.length}</div></div>
+          <div class="metric"><div class="metric-label">Total races</div><div class="metric-value" style="color:var(--race)">${races.length}</div></div>
+          <div class="metric"><div class="metric-label">Team avg attendance</div><div class="metric-value" style="color:${teamAvg>=80?'var(--success)':teamAvg>=50?'var(--warning)':'var(--danger)'}">${teamAvg}%</div></div>
+          <div class="metric"><div class="metric-label">Active members</div><div class="metric-value">${members.length}</div></div>
+        </div>
+        <div class="dash-section-title">Individual report cards</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">${memberCards}</div>
+      </div>`;
+  });
+}
+
+function exportSeasonPDF() {
+  const area=document.getElementById('season-export-area');
+  if(!area){showToast('Nothing to export','⚠️');return;}
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Season Summary</title>
+    <style>
+      body{font-family:system-ui,sans-serif;padding:24px;color:#111}
+      .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+      .metric{border:1px solid #ddd;border-radius:8px;padding:14px;text-align:center}
+      .metric-value{font-size:24px;font-weight:800}
+      .metric-label{font-size:11px;color:#666;text-transform:uppercase}
+      .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+      .mcard{border:1px solid #ddd;border-radius:8px;padding:14px;break-inside:avoid}
+      h2{font-size:14px;font-weight:700;margin:16px 0 8px;text-transform:uppercase;letter-spacing:.05em;color:#666}
+      @media print{body{padding:0}}
+    </style></head><body>
+    <h1 style="font-size:22px;font-weight:800;margin-bottom:4px">Season Summary — Otter Chaos Dragon Boat</h1>
+    <p style="color:#666;font-size:13px;margin-bottom:20px">Generated ${new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'})}</p>
+    ${area.innerHTML}
+    <script>window.print();<\/script></body></html>`);
+  w.document.close();
+}
+
+// Also show announcements banner on dashboard
+const _origPgDash=pgDashboard;
+pgDashboard=function(){
+  _origPgDash();
+  // After dashboard renders, add announcement banner
+  setTimeout(renderAnnouncementBanner,400);
+};
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
 initApp();
