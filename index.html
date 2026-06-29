@@ -1968,10 +1968,12 @@ window.evdPickSeat = function(evId, key) {
   Promise.all([
     db.ref('users').get(),
     db.ref('lineups/'+evId).get(),
+    db.ref('events/'+evId).get(),
     db.ref('availability').get(),
-  ]).then(([uSnap, lSnap, avSnap])=>{
+  ]).then(([uSnap, lSnap, evSnap, avSnap])=>{
     const allMembers = Object.values(uSnap.val()||{}).filter(u=>u.approved);
-    const ev = modalEl?._ev;
+    // Read ev from _evPage first, fall back to fresh fetch
+    const ev = window._evPage?.ev || evSnap.val() || {};
     const evDate = ev?.date||'';
     const goingUids = new Set(Object.entries((ev?.rsvps)||{}).filter(([,v])=>v==='yes').map(([k])=>k));
     const lineup = lSnap.val()||{};
