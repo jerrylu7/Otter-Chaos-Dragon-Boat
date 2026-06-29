@@ -415,6 +415,14 @@ tbody tr:hover td { background: var(--surface-alt); }
 .cal-holiday { background: #e8f0fd !important; color: #1a3c8f !important; font-weight: 700; }
 .cal-holiday-day { background: linear-gradient(135deg, #f0f4ff 0%, var(--surface) 40%); }
 .cal-holiday-day .cal-day-num { color: #1a3c8f; font-weight: 700; }
+.cal-unavail-dot { display: flex; align-items: center; gap: 2px; padding: 1px 4px; border-radius: 4px; font-size: 9px; font-weight: 700; margin-bottom: 2px; background: #fff0f0; color: #dc2626; cursor: pointer; line-height: 1.5; border: 1px solid #fca5a5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-unavail-dot:hover { background: #fecaca; }
+.cal-has-unavail { background: linear-gradient(135deg, #fff8f8 0%, var(--surface) 50%); }
+/* Unavailability popup */
+.unavail-popup { position: fixed; z-index: 300; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-md); padding: 14px 16px; min-width: 200px; max-width: 280px; }
+.unavail-popup-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; color: var(--danger); }
+.unavail-popup-item { font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
+.unavail-popup-item:last-child { border-bottom: none; }
 .cal-more { font-size: 10px; color: var(--text-3); text-align: center; margin-top: 1px; }
 .cal-legend { display: flex; gap: 14px; padding: 10px 18px; border-top: 1px solid var(--border); background: var(--surface-alt); flex-wrap: wrap; }
 .cal-legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); }
@@ -833,7 +841,7 @@ const can = {
   view:   () => ['admin','coach','tester'].includes(currentProfile?.role),
 };
 const esc   = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-const uid   = p  => (p||'id')+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+const genUid = p  => (p||'id')+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
 const today = () => new Date().toISOString().slice(0,10);
 const initials = n => String(n||'').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
 const fmtDate  = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric',year:'numeric'}) : '';
@@ -1338,7 +1346,9 @@ function pgDashboard() {
   Promise.all([
     db.ref('events').orderByChild('date').get(),
     db.ref('lineups').get(),
-  ]).then(([evSnap, lineupSnap]) => {
+    can.edit() ? db.ref('availability').get() : Promise.resolve({val:()=>({})}),
+    can.edit() ? db.ref('users').get() : Promise.resolve({val:()=>({})}),
+  ]).then(([evSnap, lineupSnap, avSnap, uSnap]) => {
     const allEvents = Object.values(evSnap.val()||{})
       .filter(e => canSeeEvent(e))
       .sort((a,b)=>a.date.localeCompare(b.date));
@@ -1418,8 +1428,10 @@ function pgDashboard() {
     window._dashAllEvents = allEvents;
     window._dashUid = uid;
     window._dashMySeat = mySeat;
+    window._dashAvailability = can.edit() ? (avSnap.val()||{}) : {};
+    window._dashMembers = can.edit() ? Object.values(uSnap.val()||{}).filter(u=>u.approved) : [];
     const n = new Date();
-    renderDashCalendar(n.getFullYear(), n.getMonth(), allEvents, uid);
+    renderDashCalendar(n.getFullYear(), n.getMonth(), allEvents, uid, window._dashAvailability, window._dashMembers);
     renderDashEventList(allEvents, uid, mySeat);
   }).catch(err => {
     console.error('Dashboard load error:', err?.code, err?.message, err);
@@ -1514,7 +1526,7 @@ function getBCHolidays(year) {
   return h;
 }
 
-function renderDashCalendar(year, month, allEvents, uid) {
+function renderDashCalendar(year, month, allEvents, uid, allAvailability, members) {
   const container = document.getElementById('cal-container'); if(!container) return;
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1523,12 +1535,29 @@ function renderDashCalendar(year, month, allEvents, uid) {
   const startDow = firstDay.getDay();
   const totalCells = Math.ceil((startDow + lastDay.getDate()) / 7) * 7;
   const todayStr = today();
-
-  // BC holidays for this year (and prev/next year for edge months)
   const holidays = { ...getBCHolidays(year-1), ...getBCHolidays(year), ...getBCHolidays(year+1) };
-
   const eventsByDate = {};
   allEvents.forEach(ev => { if(!eventsByDate[ev.date]) eventsByDate[ev.date]=[]; eventsByDate[ev.date].push(ev); });
+
+  // Build unavailability-by-date index (coaches only)
+  const unavailByDate = {};
+  if (can.edit() && allAvailability && members && members.length) {
+    Object.entries(allAvailability).forEach(([mUid, periods]) => {
+      const member = members.find(m=>m.uid===mUid);
+      if (!member) return;
+      Object.values(periods||{}).forEach(p => {
+        let d = new Date(p.from+'T12:00:00');
+        const end = new Date(p.to+'T12:00:00');
+        while (d <= end) {
+          const ds = d.toISOString().slice(0,10);
+          if (!unavailByDate[ds]) unavailByDate[ds] = [];
+          unavailByDate[ds].push({ name: member.name, reason: p.reason||'' });
+          d.setDate(d.getDate()+1);
+        }
+      });
+    });
+  }
+  window._unavailByDate = unavailByDate;
 
   let cellsHtml = '';
   for (let i=0; i<totalCells; i++) {
@@ -1538,26 +1567,28 @@ function renderDashCalendar(year, month, allEvents, uid) {
     const isToday  = dateStr===todayStr;
     const dayEvs   = eventsByDate[dateStr]||[];
     const holiday  = holidays[dateStr];
+    const unavail  = unavailByDate[dateStr]||[];
     const hasEv    = dayEvs.length>0;
-    const hasAnything = hasEv || !!holiday;
+    const hasUnavail = unavail.length>0 && can.edit();
 
     const dots = isCur ? [
-      // Holiday dot first (if any)
       ...(holiday ? [`<div class="cal-event-dot cal-holiday" title="${holiday}" style="background:#e8f0fd;color:#1a3c8f;font-size:9px">🍁 ${holiday.length>12?holiday.slice(0,12)+'…':holiday}</div>`] : []),
-      // Event dots (up to 2 if no holiday, up to 1 if holiday)
       ...dayEvs.slice(0, holiday?1:2).map(ev=>{
         const rsvp=(ev.rsvps||{})[uid]||'';
         const rc=rsvp==='yes'?'rsvp-yes':rsvp==='no'?'rsvp-no':'rsvp-pending';
         return `<div class="cal-event-dot ${evBadgeClass(ev.type)} ${rc}" onclick="event.stopPropagation();openEventDetail('${ev.id}',event)" title="${esc(ev.name)}">${evIcon(ev.type)} ${esc(ev.name.length>10?ev.name.slice(0,10)+'…':ev.name)}</div>`;
       }),
-      // +more
       ...(dayEvs.length>(holiday?1:2) ? [`<div class="cal-more">+${dayEvs.length-(holiday?1:2)} more</div>`] : []),
+      ...(hasUnavail ? [`<div class="cal-unavail-dot" onclick="event.stopPropagation();showUnavailPopup('${dateStr}',event)">⛔ ${unavail.length} away</div>`] : []),
     ].join('') : '';
 
-    const clickAttr = hasAnything&&isCur ? (hasEv ? `onclick="calDayClick('${dateStr}')"` : '') : '';
+    const clickAttr = (hasEv)&&isCur ? `onclick="calDayClick('${dateStr}')"` : '';
     const holidayCls = holiday&&isCur ? ' cal-holiday-day' : '';
-    cellsHtml += `<div class="cal-day${isCur?'':' other-month'}${isToday?' today':''}${hasEv?' has-event':''}${holidayCls}" ${clickAttr}><div class="cal-day-num">${cellDate.getDate()}</div>${dots}</div>`;
+    const unavailCls = hasUnavail&&isCur ? ' cal-has-unavail' : '';
+    cellsHtml += `<div class="cal-day${isCur?'':' other-month'}${isToday?' today':''}${hasEv?' has-event':''}${holidayCls}${unavailCls}" ${clickAttr}><div class="cal-day-num">${cellDate.getDate()}</div>${dots}</div>`;
   }
+
+  const unavailLegend = can.edit() ? `<div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#fff0f0;border:1px solid #dc2626"></div> ⛔ Members away</div>` : '';
 
   container.innerHTML = `<div class="dash-calendar">
     <div class="cal-header">
@@ -1577,16 +1608,17 @@ function renderDashCalendar(year, month, allEvents, uid) {
       <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:var(--race-bg);border:1px solid var(--race-text)"></div> Race</div>
       <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#fff3e0;border:1px solid #b45309"></div> 🦦 S.O.C.I.A.L</div>
       <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#e8f0fd;border:1px solid #1a3c8f"></div> 🍁 BC Holiday</div>
+      ${unavailLegend}
       <div class="cal-legend-item"><span style="font-size:10px;border:1px dashed var(--text-3);border-radius:3px;padding:0 4px;color:var(--text-3)">dashed</span> No reply</div>
       <div class="cal-legend-item"><span style="opacity:.4;font-size:12px;color:var(--text-2)">faded</span> Not going</div>
     </div>
   </div>`;
 }
 
-window.dashCalNav = function(year, month, dir) {
   const evs=window._dashAllEvents||[], uid=window._dashUid;
-  if (dir===0) { const n=new Date(); renderDashCalendar(n.getFullYear(),n.getMonth(),evs,uid); }
-  else { let m=month+dir,y=year; if(m<0){m=11;y--;} if(m>11){m=0;y++;} renderDashCalendar(y,m,evs,uid); }
+  const av=window._dashAvailability||{}, mems=window._dashMembers||[];
+  if (dir===0) { const n=new Date(); renderDashCalendar(n.getFullYear(),n.getMonth(),evs,uid,av,mems); }
+  else { let m=month+dir,y=year; if(m<0){m=11;y--;} if(m>11){m=0;y++;} renderDashCalendar(y,m,evs,uid,av,mems); }
 };
 
 window.calDayClick = function(dateStr) {
@@ -1859,57 +1891,150 @@ window.evdRsvp = async function(evId, val) {
   if(badge){ badge.textContent=pending; badge.style.display=pending?'inline-flex':'none'; }
 };
 
+// ── Unavailability popup (calendar day click) ─────────────────────────────────
+window.showUnavailPopup = function(dateStr, domEvent) {
+  if (domEvent) domEvent.stopPropagation();
+  const people = (window._unavailByDate||{})[dateStr]||[];
+  if (!people.length) return;
+
+  // Remove any existing popup
+  document.querySelectorAll('.unavail-popup').forEach(el=>el.remove());
+
+  const popup = document.createElement('div');
+  popup.className = 'unavail-popup';
+  popup.style.cssText = `
+    position:fixed;z-index:500;background:var(--surface);border:1px solid var(--border);
+    border-radius:10px;box-shadow:var(--shadow-md);padding:14px 16px;min-width:200px;max-width:280px;
+  `;
+
+  const d = new Date(dateStr+'T12:00:00');
+  popup.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
+      ⛔ Away on ${d.toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric'})}
+    </div>
+    ${people.map(p=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+        <div class="avatar" style="width:26px;height:26px;font-size:9px;flex-shrink:0">${initials(p.name)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600">${esc(p.name)}</div>
+          ${p.reason?`<div style="font-size:11px;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.reason)}</div>`:''}
+        </div>
+      </div>`).join('')}
+    <div style="margin-top:8px;text-align:right">
+      <button class="btn btn-sm btn-ghost" onclick="this.closest('.unavail-popup').remove()" style="font-size:12px">Close</button>
+    </div>`;
+
+  document.body.appendChild(popup);
+
+  // Position near click or calendar dot
+  const x = domEvent?.clientX || window.innerWidth/2;
+  const y = domEvent?.clientY || window.innerHeight/2;
+  const pw = 280, ph = 200;
+  popup.style.left = Math.min(x+8, window.innerWidth-pw-12)+'px';
+  popup.style.top  = Math.min(y+8, window.innerHeight-ph-12)+'px';
+
+  // Close on outside click
+  setTimeout(()=>{
+    const close = e => { if(!popup.contains(e.target)){popup.remove(); document.removeEventListener('click',close);} };
+    document.addEventListener('click', close);
+  }, 100);
+};
+
+
 window.evdPickSeat = function(evId, key) {
   if(!can.edit()) return;
-  db.ref('users').get().then(uSnap=>{
-    db.ref('lineups/'+evId).get().then(lSnap=>{
-      const allMembers = Object.values(uSnap.val()||{}).filter(u=>u.approved);
-      const ev = modalEl?._ev;
-      const goingUids = new Set(Object.entries((ev?.rsvps)||{}).filter(([,v])=>v==='yes').map(([k])=>k));
-      const lineup = lSnap.val()||{};
-      const seated = new Set(Object.entries(lineup).filter(([k,v])=>k!==key&&v).map(([,v])=>v));
-      // Only members who said Going and aren't already seated elsewhere
-      const avail = allMembers.filter(m => goingUids.has(m.uid) && !seated.has(m.uid));
-      const notGoing = allMembers.filter(m => !goingUids.has(m.uid) && !seated.has(m.uid));
-      const sideHint = key.includes('left')?' — prefer Left':key.includes('right')?' — prefer Right':'';
-      // Save parent modal state
-      const parentModal=modalEl;
-      closeModal();
-      const overlay=document.createElement('div'); overlay.className='overlay';
-      overlay.addEventListener('click',e=>{if(e.target===overlay){closeModal();modalEl=parentModal;}});
-      overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
-        <div class="modal-header"><div><div class="modal-title">Assign seat</div><div class="modal-sub">${esc(key.replace(/_/g,' '))}${sideHint}</div></div><button class="btn btn-sm btn-ghost" onclick="closeModal();modalEl=null;openEventDetail('${evId}',null)">✕</button></div>
-        <div class="modal-body" style="padding:12px 24px">
-          <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
-            Confirmed going — ${avail.length} available
-          </div>
-          <input type="text" id="seat-q2" placeholder="Search member…" style="margin-bottom:12px" oninput="filterSeats(this.value)">
-          <div id="seat-list">
-            ${avail.length ? avail.map(m=>{
-              const sides=Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
-              const match=sides.some(s=>key.includes(s.toLowerCase()));
-              return `<div class="rsvp-row" style="cursor:pointer" onclick="evdAssignSeat('${evId}','${key}','${m.uid}')">
-                <div class="avatar">${initials(m.name)}</div>
-                <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc(sides.join('/'))||'—'} side · ${m.weight?m.weight+' lbs':'?'}</div></div>
-                ${match?'<span class="badge badge-yes">✓ side match</span>':''}
-              </div>`;
-            }).join('') : '<p style="color:var(--text-3);font-size:13px;padding:8px 0">No available members — all confirmed attendees are already seated.</p>'}
-          </div>
-          ${notGoing.length ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-3)">
-            ${notGoing.length} member${notGoing.length!==1?'s':''} excluded (no RSVP or declined)
-          </div>` : ''}
-          ${lineup[key]?`<hr><button class="btn btn-danger btn-sm" onclick="evdClrSeat('${evId}','${key}')">Remove current assignment</button>`:''}
+  Promise.all([
+    db.ref('users').get(),
+    db.ref('lineups/'+evId).get(),
+    db.ref('availability').get(),
+  ]).then(([uSnap, lSnap, avSnap])=>{
+    const allMembers = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+    const ev = modalEl?._ev;
+    const evDate = ev?.date||'';
+    const goingUids = new Set(Object.entries((ev?.rsvps)||{}).filter(([,v])=>v==='yes').map(([k])=>k));
+    const lineup = lSnap.val()||{};
+    const seated = new Set(Object.entries(lineup).filter(([k,v])=>k!==key&&v).map(([,v])=>v));
+    const avail = allMembers.filter(m => goingUids.has(m.uid) && !seated.has(m.uid));
+    const notGoing = allMembers.filter(m => !goingUids.has(m.uid) && !seated.has(m.uid));
+    const sideHint = key.includes('left')?' — prefer Left':key.includes('right')?' — prefer Right':'';
+    const allAv = avSnap.val()||{};
+    function isAway(mUid) {
+      const periods = allAv[mUid];
+      if (!periods||!evDate) return null;
+      const away = Object.values(periods).filter(p=>evDate>=p.from&&evDate<=p.to);
+      return away.length ? away.map(p=>p.reason||'Away').join(', ') : null;
+    }
+    const awayCount = avail.filter(m=>isAway(m.uid)).length;
+    const parentModal=modalEl;
+    closeModal();
+    const overlay=document.createElement('div'); overlay.className='overlay';
+    overlay.addEventListener('click',e=>{if(e.target===overlay){closeModal();modalEl=parentModal;}});
+    overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+      <div class="modal-header" style="flex-shrink:0">
+        <div>
+          <div class="modal-title">Assign seat</div>
+          <div class="modal-sub">${esc(key.replace(/_/g,' '))}${sideHint}${evDate?' · '+fmtDate(evDate):''}</div>
         </div>
-      </div>`;
-      document.body.appendChild(overlay); modalEl=overlay;
-      document.getElementById('seat-q2')?.focus();
-    });
+        <button class="btn btn-sm btn-ghost" onclick="closeModal();modalEl=null;openEventDetail('${evId}',null)">✕</button>
+      </div>
+      <div class="modal-body" style="padding:12px 24px;overflow-y:auto;flex:1">
+        ${awayCount>0?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:13px;color:var(--warning-text)">
+          ⚠️ ${awayCount} member${awayCount!==1?'s are':' is'} marked unavailable on this date — shown with ⛔ below.
+        </div>`:''}
+        <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
+          Confirmed going — ${avail.length} available
+        </div>
+        <input type="text" id="seat-q2" placeholder="Search member…" style="margin-bottom:12px" oninput="filterSeats(this.value)">
+        <div id="seat-list">
+          ${avail.length ? avail.map(m=>{
+            const sides=Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
+            const match=sides.some(s=>key.includes(s.toLowerCase()));
+            const awayReason=isAway(m.uid);
+            return `<div class="rsvp-row" style="cursor:pointer;${awayReason?'background:var(--warning-bg);':''}" onclick="evdPickSeatConfirm('${evId}','${key}','${m.uid}','${awayReason?(awayReason.replace(/\\/g,'\\\\').replace(/'/g,"\\'")):''}')">
+              <div class="avatar" style="${awayReason?'background:var(--warning-bg);color:var(--warning-text)':''}">${initials(m.name)}</div>
+              <div class="rsvp-info">
+                <div class="rsvp-name">${esc(m.name)}${awayReason?' <span style=\"font-size:11px;color:var(--warning-text)\">⛔ Away</span>':''}</div>
+                <div class="rsvp-sub">${esc(sides.join('/'))||'—'} side · ${m.weight?m.weight+' lbs':'?'}${awayReason?' · '+esc(awayReason):''}</div>
+              </div>
+              ${match?'<span class="badge badge-yes">✓ side match</span>':''}
+            </div>`;
+          }).join('') : '<p style="color:var(--text-3);font-size:13px;padding:8px 0">No available members — all confirmed attendees are already seated.</p>'}
+        </div>
+        ${notGoing.length?`<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-3)">
+          ${notGoing.length} member${notGoing.length!==1?'s':''} excluded (no RSVP or declined)
+        </div>`:''}
+        ${lineup[key]?`<hr><button class="btn btn-danger btn-sm" onclick="evdClrSeat('${evId}','${key}')">Remove current assignment</button>`:''}
+      </div>
+    </div>`;
+    document.body.appendChild(overlay); modalEl=overlay;
+    document.getElementById('seat-q2')?.focus();
   });
 };
 
-window.evdAssignSeat = async function(evId, key, uid) {
+window.evdPickSeatConfirm = function(evId, key, memberUid, awayReason) {
+  if (awayReason) {
+    const existing=document.getElementById('away-confirm-banner');
+    if(existing)existing.remove();
+    const banner=document.createElement('div');
+    banner.id='away-confirm-banner';
+    banner.style.cssText='background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:12px 14px;margin:0 0 10px;font-size:13px;color:var(--warning-text)';
+    banner.innerHTML=`<div style="font-weight:700;margin-bottom:6px">⚠️ This member is marked unavailable on this date</div>
+      <div style="margin-bottom:10px">${esc(awayReason)}</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm btn-primary" onclick="evdAssignSeat('${evId}','${key}','${memberUid}')">Assign anyway</button>
+        <button class="btn btn-sm btn-ghost" onclick="document.getElementById('away-confirm-banner').remove()">Cancel</button>
+      </div>`;
+    const seatList=document.getElementById('seat-list');
+    if(seatList)seatList.before(banner);
+    banner.scrollIntoView({behavior:'smooth',block:'nearest'});
+  } else {
+    evdAssignSeat(evId, key, memberUid);
+  }
+};
+
+window.evdAssignSeat = async function(evId, key, memberUid) {
   if(!can.edit()) return;
-  await db.ref('lineups/'+evId+'/'+key).set(uid);
+  await db.ref('lineups/'+evId+'/'+key).set(memberUid);
   closeModal();
   openEventDetail(evId, null);
   setTimeout(()=>evDetailTab('lineup',evId),200);
@@ -3047,7 +3172,7 @@ window.delSeries = async groupId => {
 function openEvtModal(evJson, defaultType) {
   if (!can.edit()) return; closeModal();
   const ev = evJson ? JSON.parse(typeof evJson==='string'?evJson:JSON.stringify(evJson)) : null;
-  const e  = ev || { id:uid('e'), name:'', type:defaultType||'Practice', date:'', time:'', location:'', rsvps:{}, recurring:'none', recurUntil:'', exclusive:false, invitees:{} };
+  const e  = ev || { id:genUid('e'), name:'', type:defaultType||'Practice', date:'', time:'', location:'', rsvps:{}, recurring:'none', recurUntil:'', exclusive:false, invitees:{} };
   const isNew = !ev;
   const overlay = document.createElement('div'); overlay.className='overlay';
   overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
@@ -3204,7 +3329,7 @@ window.saveEvt = async (id, isNew) => {
     // Write all occurrences — first one keeps the provided id, rest get new ids
     const batch = {};
     dates.forEach((d, i) => {
-      const eid = i===0 ? id : uid('e');
+      const eid = i===0 ? id : genUid('e');
       const suffix = dates.length>1 ? ` (${new Date(d+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'})})` : '';
       batch['events/'+eid] = { ...base, id:eid, date:d, name: name+(dates.length>1?suffix:''), recurGroup:id, rsvps:{} };
     });
