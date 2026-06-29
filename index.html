@@ -360,6 +360,7 @@ tbody tr:hover td { background: var(--surface-alt); }
 .seat-slot.editable:hover { border-color: var(--accent); background: var(--accent-bg); }
 .seat-slot.filled { border-style: solid; border-color: var(--border); background: var(--surface); }
 .seat-slot.filled.editable:hover { border-color: var(--accent); }
+.seat-slot-center { min-width: 200px; max-width: 300px; justify-content: center; }
 .seat-slot .seat-name  { font-weight: 700; font-size: 13px; }
 .seat-slot .seat-sub   { font-size: 10px; color: var(--text-3); }
 .seat-slot .seat-empty { color: var(--text-3); font-size: 12px; font-style: italic; }
@@ -1672,9 +1673,15 @@ function renderDashEventList(allEvents, uid, mySeat) {
 }
 
 window.openEventDetail = function(evId, domEvent) {
-  // Don't open if user clicked the RSVP buttons
   if (domEvent && domEvent.target.closest('.rsvp-action-btns')) return;
-  closeModal();
+
+  // Navigate to a dedicated event detail page instead of a modal
+  const prev = currentPage;
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  document.getElementById('pg-content').innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading…</div>';
+  document.getElementById('pg-actions').innerHTML = '';
+  document.getElementById('mob-pg-actions').innerHTML = '';
+  closeSidebar();
 
   Promise.all([
     db.ref('events/'+evId).get(),
@@ -1685,53 +1692,65 @@ window.openEventDetail = function(evId, domEvent) {
     const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
     const lineup  = lineupSnap.val()||{};
     const uid     = currentUser.uid;
-    const myRsvp  = (ev.rsvps||{})[uid]||'';
     const yesCount = Object.values(ev.rsvps||{}).filter(v=>v==='yes').length;
-    const isRace  = ev.type==='Race';
 
-    const overlay = document.createElement('div'); overlay.className='overlay';
-    overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+    // Set page title
+    document.getElementById('pg-title').textContent = ev.name;
+    document.getElementById('pg-sub').textContent   = fmtDate(ev.date) + (ev.time ? ' · ' + fmtTime(ev.time) : '') + (ev.location ? ' · ' + ev.location : '');
 
-    overlay.innerHTML = `<div class="modal" style="width:min(660px,100%)">
-      <div class="modal-header">
-        <div>
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-            <div class="modal-title">${esc(ev.name)}</div>
-            <span class="badge ${evBadgeClass(ev.type)}">${ev.type}</span>
-            ${ev.exclusive?'<span class="badge badge-exclusive">🔒 Invite only</span>':''}
-          </div>
-          <div class="modal-sub" style="margin-top:4px;display:flex;gap:14px;flex-wrap:wrap">
-            <span>📅 ${fmtDate(ev.date)}</span>
-            ${ev.time?`<span>🕐 ${fmtTime(ev.time)}</span>`:''}
-            ${ev.location?`<span>📍 ${esc(ev.location)}</span>`:''}
-            <span style="color:var(--text-3)">✓ ${yesCount} going</span>
-          </div>
-        </div>
-        <button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button>
+    // Back button in actions bar
+    const A = document.getElementById('pg-actions');
+    const backBtn = document.createElement('button');
+    backBtn.className = 'btn btn-ghost';
+    backBtn.innerHTML = '← Back';
+    backBtn.onclick = () => navigate(prev||'dashboard');
+    A.appendChild(backBtn);
+
+    if (can.edit()) {
+      const bulkBtn = document.createElement('button');
+      bulkBtn.className = 'btn';
+      bulkBtn.innerHTML = '👥 Bulk RSVP';
+      bulkBtn.onclick = () => openBulkRsvp(evId);
+      A.appendChild(bulkBtn);
+      const manBtn = document.createElement('button');
+      manBtn.className = 'btn btn-ghost';
+      manBtn.innerHTML = '✏️ Edit event';
+      manBtn.onclick = () => openEvtModal(JSON.stringify(ev));
+      A.appendChild(manBtn);
+    }
+
+    // Store data on window for tab switching
+    window._evPage = { evId, ev, members, lineup, uid, prev };
+
+    // Build tab bar + content area
+    const C = document.getElementById('pg-content');
+    C.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        <span class="badge ${evBadgeClass(ev.type)}" style="font-size:13px">${ev.type}</span>
+        ${ev.exclusive?'<span class="badge badge-exclusive">🔒 Invite only</span>':''}
+        <span style="color:var(--text-3);font-size:13px">✓ ${yesCount} going</span>
       </div>
-
-      <div class="ev-detail-tabs">
-        <button class="ev-detail-tab active" id="edt-rsvp" onclick="evDetailTab('rsvp','${evId}')">RSVP</button>
-        <button class="ev-detail-tab" id="edt-lineup" onclick="evDetailTab('lineup','${evId}')">Lineup</button>
-        ${can.edit()?`<button class="ev-detail-tab" id="edt-bulk" onclick="openBulkRsvp('${evId}')">Bulk RSVP</button>`:''}
-        ${can.edit()?`<button class="ev-detail-tab" id="edt-manage" onclick="evDetailTab('manage','${evId}')">Manage</button>`:''}
+      <div class="ev-detail-tabs" style="margin:0 0 20px">
+        <button class="ev-detail-tab active" id="edt-rsvp" onclick="evPageTab('rsvp')">RSVP</button>
+        <button class="ev-detail-tab" id="edt-lineup" onclick="evPageTab('lineup')">Lineup</button>
       </div>
-
-      <div id="ev-detail-body" class="modal-body" style="padding:16px 24px"></div>
-    </div>`;
-
-    document.body.appendChild(overlay); modalEl=overlay;
-    overlay._ev      = ev;
-    overlay._members = members;
-    overlay._lineup  = lineup;
-    overlay._evId    = evId;
+      <div id="ev-detail-body"></div>`;
 
     renderEvDetailRsvp(evId, ev, members, lineup, uid);
   }).catch(err => {
     console.error('Event detail load error:', err);
-    closeModal();
     showToast('Could not load event — check your connection','⚠️');
+    navigate(prev||'dashboard');
   });
+};
+
+window.evPageTab = function(tab) {
+  const d = window._evPage; if (!d) return;
+  ['rsvp','lineup'].forEach(t => {
+    const el = document.getElementById('edt-'+t); if(el) el.classList.toggle('active', t===tab);
+  });
+  if (tab==='rsvp')   renderEvDetailRsvp(d.evId, d.ev, d.members, d.lineup, d.uid);
+  if (tab==='lineup') renderEvDetailLineup(d.evId, d.ev, d.members, d.lineup);
 };
 
 function renderEvDetailRsvp(evId, ev, members, lineup, uid) {
@@ -1795,7 +1814,7 @@ function renderEvDetailLineup(evId, ev, members, lineup) {
     const warnStyle = memberUid && !isGoing ? 'border-color:var(--warning);background:var(--warning-bg)' : '';
     const style = isMe ? 'background:var(--accent-bg);border-color:var(--accent)' : warnStyle;
     const click = ed ? `onclick="evdPickSeat('${evId}','${key}')"` : '';
-    return `<div class="seat-slot${name?' filled':''}${ed?' editable':''}" ${click} style="${style};min-height:40px">
+    return `<div class="seat-slot${name?' filled':''}${ed?' editable':''}${(key==='drummer'||key==='steers')?' seat-slot-center':''}" ${click} style="${style};min-height:40px">
       ${name
         ? `<div class="avatar" style="width:22px;height:22px;font-size:9px;${memberUid&&!isGoing?'background:var(--warning-bg);color:var(--warning-text)':''}">${initials(name)}</div>
            <div style="flex:1;min-width:0">
@@ -1827,51 +1846,56 @@ function renderEvDetailLineup(evId, ev, members, lineup) {
       <div style="font-size:18px;font-weight:800;color:var(--success-text)">${bal.rCount}</div>
       ${bal.rW?`<div style="font-size:11px;color:var(--text-3)">${bal.rW} lbs</div>`:''}
     </div>
-  </div>${bal.wImbalance>30?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--warning-text);margin-bottom:10px">⚖️ ${bal.wImbalance} lbs imbalance between sides</div>`:''}` : '';
+  </div>
+  ${Math.abs(bal.lCount-bal.rCount)>1?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--warning-text);margin-bottom:8px">⚖️ Side imbalance: ${Math.abs(bal.lCount-bal.rCount)} more ${bal.lCount>bal.rCount?'left':'right'}-side paddlers</div>`:''}
+  ${bal.wImbalance>10?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--warning-text);margin-bottom:10px">⚖️ Weight imbalance: ${bal.wImbalance} lbs between sides</div>`:''}` : '';
 
   body.innerHTML = `
     ${!ed?'<div class="readonly-notice" style="margin-bottom:12px">👁 View only — coaches and admins can edit the lineup.</div>':''}
     ${balPanel}
     <div class="boat-visual" style="margin-bottom:12px;padding:14px">
-      <div class="boat-section-title" style="font-size:13px">🥁 Drummer</div>
-      ${seatEl('drummer','Drummer')}
+      <div style="text-align:center;margin-bottom:6px">
+        <div class="boat-section-title" style="font-size:13px;margin-bottom:4px">🥁 Drummer</div>
+        <div style="display:flex;justify-content:center">${seatEl('drummer','Drummer')}</div>
+      </div>
       <hr style="margin:10px 0">
       <div style="display:grid;grid-template-columns:1fr 28px 1fr;gap:4px;margin-bottom:4px;font-size:10px;font-weight:700;color:var(--text-3);text-align:center;text-transform:uppercase">
         <div>Left</div><div></div><div>Right</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 28px 1fr;gap:5px 4px;align-items:center">${rows}</div>
       <hr style="margin:10px 0">
-      <div class="boat-section-title" style="font-size:13px">🎯 Steers</div>
-      ${seatEl('steers','Steers')}
+      <div style="text-align:center;margin-top:6px">
+        <div class="boat-section-title" style="font-size:13px;margin-bottom:4px">🎯 Steers</div>
+        <div style="display:flex;justify-content:center">${seatEl('steers','Steers')}</div>
+      </div>
     </div>`;
 }
 
 window.evDetailTab = function(tab, evId) {
-  ['rsvp','lineup','manage'].forEach(t=>{
-    const el=document.getElementById('edt-'+t); if(el) el.classList.toggle('active',t===tab);
-  });
-  const o = modalEl; if(!o) return;
-  const ev=o._ev, members=o._members, lineup=o._lineup;
-  if(tab==='rsvp')    renderEvDetailRsvp(evId, ev, members, lineup, currentUser.uid);
-  if(tab==='lineup')  renderEvDetailLineup(evId, ev, members, lineup);
-  if(tab==='manage')  {
-    closeModal();
-    openEvtModal(JSON.stringify(ev));
-  }
+  // Redirect to page-based tab switcher
+  evPageTab(tab);
 };
 
 window.evdRsvp = async function(evId, val) {
   const uid = currentUser.uid;
   await db.ref('events/'+evId+'/rsvps/'+uid).set(val);
-  sendRSVP(uid, evId, val); // Google Apps Script hook
+  sendRSVP(uid, evId, val);
 
-  // Update pill + buttons in modal
+  // Update pill + buttons on the page
   const pill = document.getElementById('evd-pill');
   if(pill) pill.innerHTML = val==='yes'?'<span class="rsvp-status-pill yes">✓ Going</span>':'<span class="rsvp-status-pill no">✗ Not going</span>';
   document.getElementById('evd-yes')?.classList.toggle('selected-yes', val==='yes');
   document.getElementById('evd-no')?.classList.toggle('selected-no', val==='no');
 
-  // Also update the card on the page behind
+  // Reload RSVP tab data
+  const evSnap = await db.ref('events/'+evId).get();
+  const updatedEv = evSnap.val();
+  if (window._evPage) {
+    window._evPage.ev = updatedEv;
+    renderEvDetailRsvp(evId, updatedEv, window._evPage.members, window._evPage.lineup, uid);
+  }
+
+  // Update the card on any list page behind this one
   const card = document.getElementById('ecard-'+evId);
   if(card) {
     card.classList.remove('rsvp-yes','rsvp-no','rsvp-pending');
@@ -1880,12 +1904,9 @@ window.evdRsvp = async function(evId, val) {
     if(p2){ p2.className='rsvp-status-pill '+(val==='yes'?'yes':'no'); p2.textContent=val==='yes'?'✓ Going':'✗ Not going'; }
   }
 
-  // Reload modal data so RSVP summary updates
-  const evSnap = await db.ref('events/'+evId).get();
-  if(modalEl){ modalEl._ev = evSnap.val(); renderEvDetailRsvp(evId, modalEl._ev, modalEl._members, modalEl._lineup, uid); }
   showToast(val==='yes'?'Marked as going ✓':'Marked as not going');
 
-  // Update badge
+  // Update dash badge
   const snap2 = await db.ref('events').orderByChild('date').get();
   const pending = Object.values(snap2.val()||{}).filter(e=>e.date>=today()&&!(e.rsvps||{})[uid]).length;
   const badge = document.getElementById('dash-badge');
@@ -1976,7 +1997,7 @@ window.evdPickSeat = function(evId, key) {
           <div class="modal-title">Assign seat</div>
           <div class="modal-sub">${esc(key.replace(/_/g,' '))}${sideHint}${evDate?' · '+fmtDate(evDate):''}</div>
         </div>
-        <button class="btn btn-sm btn-ghost" onclick="closeModal();modalEl=null;openEventDetail('${evId}',null)">✕</button>
+        <button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button>
       </div>
       <div class="modal-body" style="padding:12px 24px;overflow-y:auto;flex:1">
         ${awayCount>0?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:13px;color:var(--warning-text)">
@@ -2037,17 +2058,29 @@ window.evdAssignSeat = async function(evId, key, memberUid) {
   if(!can.edit()) return;
   await db.ref('lineups/'+evId+'/'+key).set(memberUid);
   closeModal();
-  openEventDetail(evId, null);
-  setTimeout(()=>evDetailTab('lineup',evId),200);
+  // Refresh the lineup tab on the event page
+  const lSnap = await db.ref('lineups/'+evId).get();
+  const newLineup = lSnap.val()||{};
+  if(window._evPage) {
+    window._evPage.lineup = newLineup;
+    renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, newLineup);
+    // Switch to lineup tab
+    ['rsvp','lineup'].forEach(t=>{
+      const el=document.getElementById('edt-'+t); if(el) el.classList.toggle('active',t==='lineup');
+    });
+  }
   showToast('Seat assigned','🚣');
 };
 
 window.evdClrSeat = async function(evId, key) {
   if(!can.edit()) return;
   await db.ref('lineups/'+evId+'/'+key).remove();
-  // Refresh lineup in open modal
   const lSnap = await db.ref('lineups/'+evId).get();
-  if(modalEl){ modalEl._lineup=lSnap.val()||{}; renderEvDetailLineup(evId, modalEl._ev, modalEl._members, modalEl._lineup); }
+  const newLineup = lSnap.val()||{};
+  if(window._evPage) {
+    window._evPage.lineup = newLineup;
+    renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, newLineup);
+  }
   showToast('Seat cleared');
 };
 
@@ -2686,7 +2719,7 @@ function pgRoster() {
         <div class="metric"><div class="metric-label">Can paddle Right</div><div class="metric-value">${rc}</div></div>
         <div class="metric"><div class="metric-label">Avg weight</div><div class="metric-value">${avgW}<span style="font-size:16px;font-weight:400"> lbs</span></div></div>
       </div>
-      ${Math.abs(lc-rc)>4?`<div class="readonly-notice" style="background:var(--warning-bg);border-color:var(--warning);color:var(--warning-text)">⚖️ Paddle side imbalance: ${Math.abs(lc-rc)} more ${lc>rc?'left':'right'}-side paddlers. Consider recruiting for the ${lc>rc?'right':'left'} side.</div>`:''}
+      ${Math.abs(lc-rc)>1?`<div class="readonly-notice" style="background:var(--warning-bg);border-color:var(--warning);color:var(--warning-text)">⚖️ Paddle side imbalance: ${Math.abs(lc-rc)} more ${lc>rc?'left':'right'}-side paddlers. Consider recruiting for the ${lc>rc?'right':'left'} side.</div>`:''}
       ${!can.admin()?'<div class="readonly-notice">👁 Click any member name to view their profile and add coaching notes or media.</div>':''}
       <div class="table-wrap"><table>
         <thead><tr><th>Member</th><th>App role</th><th>Sides</th><th>Positions</th><th>Weight</th><th>Emergency contact</th>${can.admin()?'<th></th>':''}</tr></thead>
