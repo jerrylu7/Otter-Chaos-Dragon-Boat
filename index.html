@@ -1615,6 +1615,7 @@ function renderDashCalendar(year, month, allEvents, uid, allAvailability, member
   </div>`;
 }
 
+window.dashCalNav = function(year, month, dir) {
   const evs=window._dashAllEvents||[], uid=window._dashUid;
   const av=window._dashAvailability||{}, mems=window._dashMembers||[];
   if (dir===0) { const n=new Date(); renderDashCalendar(n.getFullYear(),n.getMonth(),evs,uid,av,mems); }
