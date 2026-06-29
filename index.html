@@ -2254,7 +2254,7 @@ function pgRoster() {
       return;
     }
 
-    // Coach / Admin: full info
+    // Coach / Admin: full info + clickable profile
     const lc = members.filter(m=>(Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).includes('Left')).length;
     const rc = members.filter(m=>(Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).includes('Right')).length;
     const avgW = members.length ? Math.round(members.reduce((a,m)=>a+Number(m.weight||0),0)/members.length) : 0;
@@ -2265,24 +2265,189 @@ function pgRoster() {
         <div class="metric"><div class="metric-label">Can paddle Right</div><div class="metric-value">${rc}</div></div>
         <div class="metric"><div class="metric-label">Avg weight</div><div class="metric-value">${avgW}<span style="font-size:16px;font-weight:400"> lbs</span></div></div>
       </div>
-      ${!can.admin()?'<div class="readonly-notice">👁 View only — contact an admin to update member info.</div>':''}
+      ${!can.admin()?'<div class="readonly-notice">👁 Click any member name to view their profile and add coaching notes or media.</div>':''}
       <div class="table-wrap"><table>
         <thead><tr><th>Member</th><th>App role</th><th>Sides</th><th>Positions</th><th>Weight</th><th>Emergency contact</th>${can.admin()?'<th></th>':''}</tr></thead>
         <tbody>${members.map(m=>`<tr>
-          <td><div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc(m.email)}</div></div></div></td>
+          <td>
+            <div class="member-cell" style="cursor:pointer" onclick="openMemberProfile('${m.uid}')" title="View ${esc(m.name)}'s profile">
+              <div class="avatar" style="flex-shrink:0">${initials(m.name)}</div>
+              <div>
+                <div class="mname" style="color:var(--accent);text-decoration:underline;text-decoration-color:transparent;transition:text-decoration-color 0.15s" onmouseover="this.style.textDecorationColor='var(--accent)'" onmouseout="this.style.textDecorationColor='transparent'">${esc(m.name)}</div>
+                <div class="msub">${esc(m.email)}</div>
+              </div>
+            </div>
+          </td>
           <td>${roleBadge(m.role)}</td>
           <td>${(()=>{const s=Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];return s.length?s.map(sv=>`<span class="badge" style="background:${sv==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${sv==='Left'?'var(--accent-text)':'var(--success-text)'};margin:1px">${esc(sv)}</span>`).join(' '):'—';})()}</td>
           <td>${(()=>{const p=Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler'];return p.join(', ');})()}</td>
           <td>${m.weight?esc(m.weight)+' lbs':'—'}</td>
           <td style="font-size:13px;color:var(--text-2)">${esc(m.emergency||'—')}</td>
           ${can.admin()?`<td><div style="display:flex;gap:5px">
-            <button class="btn btn-sm btn-ghost" onclick='openMemberModal(${JSON.stringify(JSON.stringify(m))})'>Edit</button>
-            <button class="btn btn-sm btn-danger btn-ghost" onclick="unapprove('${m.uid}')">Remove</button>
+            <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();openMemberModal(${JSON.stringify(JSON.stringify(m))})">Edit</button>
+            <button class="btn btn-sm btn-danger btn-ghost" onclick="event.stopPropagation();unapprove('${m.uid}')">Remove</button>
           </div></td>`:''}
         </tr>`).join('')}</tbody>
       </table></div>`;
   });
 }
+
+// ── Member profile modal (coach/admin view from Roster) ──────────────────────
+window.openMemberProfile = function(memberUid) {
+  if (!can.edit()) return;
+  closeModal();
+
+  Promise.all([
+    db.ref('users/'+memberUid).get(),
+    db.ref('profileMedia/'+memberUid).get(),
+    db.ref('profileNotes/'+memberUid).get(),
+    db.ref('events').get(),
+  ]).then(([uSnap, mediaSnap, notesSnap, evSnap]) => {
+    const m = uSnap.val(); if (!m) return;
+    const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
+    const noteItems  = Object.entries(notesSnap.val()||{}).filter(([,n])=>n.isCoach).sort((a,b)=>b[1].ts-a[1].ts);
+    const allEvs     = Object.values(evSnap.val()||{});
+    const past       = allEvs.filter(e=>e.date<today());
+    const pastPrac   = past.filter(e=>e.type==='Practice');
+    const attPrac    = pastPrac.filter(e=>(e.rsvps||{})[memberUid]==='yes').length;
+    const pracPct    = pastPrac.length ? Math.round(attPrac/pastPrac.length*100) : null;
+    const sides = Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
+    const roles = Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler'];
+
+    const overlay = document.createElement('div'); overlay.className='overlay';
+    overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+    overlay.innerHTML = `<div class="modal" style="display:flex;flex-direction:column;max-height:90vh;width:min(620px,100%)">
+      <div class="modal-header" style="flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="width:44px;height:44px;border-radius:50%;background:var(--accent-bg);color:var(--accent-text);font-size:16px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${initials(m.name)}</div>
+          <div>
+            <div class="modal-title">${esc(m.name)}</div>
+            <div class="modal-sub" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:3px">
+              ${roleBadge(m.role)}
+              ${sides.map(s=>`<span class="badge" style="background:${s==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${s==='Left'?'var(--accent-text)':'var(--success-text)'}">${s}</span>`).join('')}
+              ${roles.map(r=>`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);border:1px solid var(--border)">${r}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1">
+
+        <!-- Quick stats -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
+          <div style="text-align:center;padding:12px;background:var(--surface-alt);border-radius:var(--radius)">
+            <div style="font-size:22px;font-weight:800;color:${pracPct===null?'var(--text-3)':pracPct>=80?'var(--success)':pracPct>=50?'var(--warning)':'var(--danger)'}">${pracPct!==null?pracPct+'%':'—'}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">Practice att.</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--surface-alt);border-radius:var(--radius)">
+            <div style="font-size:22px;font-weight:800;color:var(--text)">${m.weight?m.weight+' lbs':'—'}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">Weight</div>
+          </div>
+          <div style="text-align:center;padding:12px;background:var(--surface-alt);border-radius:var(--radius)">
+            <div style="font-size:22px;font-weight:800;color:var(--text)">${past.length}</div>
+            <div style="font-size:11px;color:var(--text-3);margin-top:2px">Events</div>
+          </div>
+        </div>
+
+        <!-- Contact info -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;font-size:13px">
+          <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Email</div><div style="word-break:break-all">${esc(m.email)}</div></div>
+          <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Emergency</div><div>${esc(m.emergency||'—')}</div></div>
+        </div>
+
+        <!-- Photos & Videos -->
+        <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">📸 Photos &amp; videos</div>
+        <div id="mp-media-section">
+          ${mediaItems.length ? `<div class="media-grid" id="mp-media-grid">${mediaItems.map(([key,item])=>{
+            const isVid=item.type&&item.type.startsWith('video');
+            return `<div class="media-thumb" onclick="openMediaViewer('${esc(item.url)}','${isVid?'video':'image'}')">
+              ${isVid?`<video src="${esc(item.url)}" muted></video><div class="media-play">▶️</div>`:`<img src="${esc(item.url)}" alt="" loading="lazy">`}
+              <button class="media-del" onclick="event.stopPropagation();deleteMemberMedia('${memberUid}','${key}')">✕</button>
+            </div>`;
+          }).join('')}</div>` : `<div style="color:var(--text-3);font-size:13px;margin-bottom:8px">No photos or videos yet.</div>`}
+          <label class="upload-zone" style="margin-top:8px">
+            📁 Upload photo or video (max 10MB each)
+            <input type="file" accept="image/*,video/*" multiple style="display:none" onchange="uploadMemberMedia('${memberUid}',this)">
+          </label>
+          <div id="mp-upload-progress" style="font-size:12px;color:var(--text-3);margin-top:4px"></div>
+        </div>
+
+        <hr style="margin:18px 0">
+
+        <!-- Coaching notes -->
+        <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">🏅 Coaching notes</div>
+        <div id="mp-notes-list">
+          ${noteItems.length ? noteItems.map(([key,n])=>`<div class="note-bubble coach-note" id="note-${key}">
+            <div class="note-author">
+              <span>🏅 ${esc(n.authorName||'Coach')}</span>
+              <span style="display:flex;align-items:center;gap:6px">
+                <span>${n.ts?new Date(n.ts).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}):''}</span>
+                <button class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:11px;color:var(--danger-text)" onclick="deleteMemberNote('${memberUid}','${key}')">✕</button>
+              </span>
+            </div>
+            <div class="note-text">${esc(n.text)}</div>
+          </div>`).join('') : `<div style="color:var(--text-3);font-size:13px;margin-bottom:8px">No coaching notes yet.</div>`}
+        </div>
+        <textarea id="mp-note-input" rows="3" style="width:100%;margin-top:10px;resize:vertical;font-size:14px;box-sizing:border-box" placeholder="Add coaching note (feedback, technique, goals…)"></textarea>
+        <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="addMemberNote('${memberUid}')">Add note</button>
+      </div>
+
+      <div class="modal-footer" style="flex-shrink:0">
+        ${can.admin() ? `<button class="btn" onclick="closeModal();openMemberModal(${JSON.stringify(JSON.stringify(m))})">Edit member info</button>` : ''}
+        <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay); modalEl=overlay;
+  });
+};
+
+// Media actions inside member profile modal
+window.uploadMemberMedia = async function(memberUid, input) {
+  const progress = document.getElementById('mp-upload-progress');
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  if (progress) progress.textContent = `Uploading ${files.length} file${files.length>1?'s':''}…`;
+  for (const file of files) {
+    if (file.size > 10*1024*1024) { showToast(`${file.name} too large (max 10MB)`,'⚠️'); continue; }
+    const dataUrl = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsDataURL(file); });
+    const key = db.ref('profileMedia/'+memberUid).push().key;
+    await db.ref('profileMedia/'+memberUid+'/'+key).set({ url:dataUrl, type:file.type, name:file.name, addedAt:Date.now(), addedBy:currentUser.uid });
+  }
+  if (progress) progress.textContent='';
+  input.value='';
+  showToast('Uploaded!','📸');
+  openMemberProfile(memberUid);
+};
+
+window.deleteMemberMedia = async function(memberUid, key) {
+  if (!confirm('Remove this photo/video?')) return;
+  await db.ref('profileMedia/'+memberUid+'/'+key).remove();
+  showToast('Removed','🗑');
+  openMemberProfile(memberUid);
+};
+
+window.addMemberNote = async function(memberUid) {
+  const text = document.getElementById('mp-note-input')?.value?.trim();
+  if (!text) { showToast('Note is empty','⚠️'); return; }
+  const key = db.ref('profileNotes/'+memberUid).push().key;
+  await db.ref('profileNotes/'+memberUid+'/'+key).set({
+    uid: currentUser.uid,
+    authorName: currentProfile.name,
+    text,
+    ts: Date.now(),
+    isCoach: true,
+  });
+  showToast('Note added ✓');
+  openMemberProfile(memberUid);
+};
+
+window.deleteMemberNote = async function(memberUid, key) {
+  if (!confirm('Delete this note?')) return;
+  await db.ref('profileNotes/'+memberUid+'/'+key).remove();
+  showToast('Note deleted','🗑');
+  openMemberProfile(memberUid);
+};
 
 function showInviteModal() {
   closeModal();
