@@ -451,6 +451,25 @@ tbody tr:hover td { background: var(--surface-alt); }
 .ev-detail-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 .ev-detail-tab:hover:not(.active) { color: var(--text); }
 .past-events-table { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow); }
+
+/* ── Profile media & notes ── */
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 12px; }
+.media-thumb { position: relative; border-radius: 8px; overflow: hidden; background: var(--surface-alt); border: 1px solid var(--border); aspect-ratio: 1; cursor: pointer; }
+.media-thumb img, .media-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.media-thumb .media-del { position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.65); color: #fff; border: none; border-radius: 50%; width: 22px; height: 22px; font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s; }
+.media-thumb:hover .media-del { opacity: 1; }
+.media-thumb .media-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 30px; pointer-events: none; }
+.upload-zone { border: 2px dashed var(--border-strong); border-radius: var(--radius); padding: 18px; text-align: center; cursor: pointer; transition: all 0.15s; color: var(--text-3); font-size: 13px; }
+.upload-zone:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-bg); }
+.note-bubble { background: var(--surface-alt); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 8px; }
+.note-bubble .note-author { font-size: 11px; font-weight: 700; color: var(--text-3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; display: flex; justify-content: space-between; align-items: center; }
+.note-bubble .note-text { font-size: 14px; color: var(--text); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.note-bubble.coach-note { border-left: 3px solid var(--warning); }
+/* ── Attendance threshold banner ── */
+.att-threshold-banner { border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
+.att-banner-red    { background: var(--danger-bg);  color: var(--danger-text);  border: 1px solid var(--danger); }
+.att-banner-yellow { background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning); }
+.att-banner-green  { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success); }
 .dash-empty { text-align: center; padding: 32px 16px; color: var(--text-3); font-size: 14px; }
 
 .toast { position: fixed; bottom: 24px; right: 24px; background: #1a1916; color: #f5f4f0; padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; box-shadow: var(--shadow-md); z-index: 999; animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; }
@@ -923,6 +942,11 @@ function startAuth() {
 function showAuth() {
   document.getElementById('auth-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+  // Auto-switch to Join tab if invite link was used
+  if (location.hash === '#join') {
+    switchTab('register');
+    history.replaceState(null, '', location.pathname);
+  }
   // Populate team name on login screen
   db.ref('settings/teamName').get().then(s => {
     if (s.val()) document.getElementById('auth-team-name').textContent = s.val();
@@ -1862,6 +1886,30 @@ function pgRaces() {
 // PRACTICES
 // ═══════════════════════════════════════════════════════════════════════════════
 function pgPractices() {
+  // Check threshold for current user and show banner
+  const uid = currentUser?.uid;
+  Promise.all([
+    db.ref('events').get(),
+    db.ref('settings/attendanceThreshold').get(),
+  ]).then(([evSnap, threshSnap]) => {
+    const threshold = threshSnap.val();
+    if (threshold != null && uid) {
+      const past = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today());
+      const attended = past.filter(e=>(e.rsvps||{})[uid]==='yes').length;
+      const pct = past.length ? Math.round(attended/past.length*100) : null;
+      if (pct !== null) {
+        const t = Number(threshold);
+        const banner = document.createElement('div');
+        banner.className = 'att-threshold-banner ' + (pct<t*0.6?'att-banner-red':pct<t*0.8?'att-banner-yellow':'att-banner-green');
+        banner.textContent = (pct<t*0.6?'🔴':pct<t*0.8?'🟡':'🟢') + ' ' +
+          (pct < t
+            ? `Your practice attendance is ${pct}% — below the team minimum of ${t}%.`
+            : `Your practice attendance is ${pct}% — meets the team minimum of ${t}%. `);
+        const C = document.getElementById('pg-content');
+        if (C) C.prepend(banner);
+      }
+    }
+  }).catch(()=>{});
   pgFilteredEvents('Practice');
 }
 
@@ -1971,14 +2019,24 @@ function pgFilteredEvents(typeFilter) {
 // ═══════════════════════════════════════════════════════════════════════════════
 function pgProfile() {
   const C = document.getElementById('pg-content');
+  const A = document.getElementById('pg-actions');
   const p = currentProfile;
+  const isCoach = can.edit();
 
-  Promise.all([db.ref('events').get(), db.ref('lineups').get()]).then(([evSnap, lSnap]) => {
+  Promise.all([
+    db.ref('events').get(),
+    db.ref('lineups').get(),
+    db.ref('profileMedia/'+p.uid).get(),
+    db.ref('profileNotes/'+p.uid).get(),
+    db.ref('settings/attendanceThreshold').get(),
+  ]).then(([evSnap, lSnap, mediaSnap, notesSnap, threshSnap]) => {
     const allEvs   = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
     const lineups  = lSnap.val()||{};
+    const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
+    const noteItems  = Object.entries(notesSnap.val()||{}).sort((a,b)=>b[1].ts-a[1].ts);
+    const threshold  = threshSnap.val();
     const past     = allEvs.filter(e => e.date < today());
     const upcoming = allEvs.filter(e => e.date >= today());
-
     const pastPractices = past.filter(e=>e.type==='Practice');
     const pastRaces     = past.filter(e=>e.type==='Race');
     const pastSocials   = past.filter(e=>e.type==='Otter S.O.C.I.A.L');
@@ -1993,38 +2051,53 @@ function pgProfile() {
     const socialPct     = pastSocials.length ? Math.round(attSocials/pastSocials.length*100) : null;
     const pendingRsvp   = upcoming.filter(e=>!(e.rsvps||{})[p.uid]).length;
     const upcomingGoing = upcoming.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
-
-    // How many times were they seated
-    const seatedCount = past.filter(evId => {
-      const lup = lineups[evId]||{};
-      return Object.values(lup).includes(p.uid);
-    }).length;
-
-    // Recent 6 past events
     const recent6 = [...past].reverse().slice(0,6);
-
     const sides = Array.isArray(p.sides)?p.sides:p.side?[p.side]:[];
     const roles = Array.isArray(p.paddlerRoles)?p.paddlerRoles:p.paddlerRole?[p.paddlerRole]:['Paddler'];
 
-    function statBlock(val, label, color) {
-      return `<div class="dash-stat">
-        <div class="dash-stat-val" style="color:${color||'var(--text)'}">${val}</div>
-        <div class="dash-stat-label">${label}</div>
-      </div>`;
+    function statBlock(val,label,color){return `<div class="dash-stat"><div class="dash-stat-val" style="color:${color||'var(--text)'}">${val}</div><div class="dash-stat-label">${label}</div></div>`;}
+
+    // Threshold banner
+    let threshBanner = '';
+    if (threshold!=null && practicePct!=null) {
+      const t=Number(threshold);
+      const cls=practicePct<t*0.6?'att-banner-red':practicePct<t*0.8?'att-banner-yellow':'att-banner-green';
+      const emoji=practicePct<t*0.6?'🔴':practicePct<t*0.8?'🟡':'🟢';
+      const msg=practicePct<t
+        ? `Your practice attendance (${practicePct}%) is below the team minimum of ${t}%.`
+        : `Your practice attendance (${practicePct}%) meets the team minimum of ${t}%. Great work!`;
+      threshBanner=`<div class="att-threshold-banner ${cls}">${emoji} ${msg}</div>`;
     }
 
-    C.innerHTML = `
-      <!-- Identity -->
+    // Media
+    const mediaHtml=`<div class="dash-section-title">Photos &amp; videos</div>
+      <div class="card" style="padding:16px;margin-bottom:16px">
+        ${mediaItems.length?`<div class="media-grid">${mediaItems.map(([key,item])=>{const isVid=item.type&&item.type.startsWith('video');const del=isCoach?`<button class="media-del" onclick="event.stopPropagation();deleteMedia('${p.uid}','${key}')">✕</button>`:'';return `<div class="media-thumb" onclick="openMediaViewer('${esc(item.url)}','${isVid?'video':'image'}')">${isVid?`<video src="${esc(item.url)}" muted></video><div class="media-play">▶️</div>`:`<img src="${esc(item.url)}" alt="" loading="lazy">`}${del}</div>`;}).join('')}</div>`:`<div style="color:var(--text-3);font-size:13px;margin-bottom:12px">No photos or videos yet.</div>`}
+        ${isCoach?`<label class="upload-zone">📁 Upload photo or video<input type="file" accept="image/*,video/*" multiple style="display:none" onchange="uploadProfileMedia('${p.uid}',this)"></label><div id="upload-progress" style="font-size:12px;color:var(--text-3);margin-top:6px"></div>`:''}
+      </div>`;
+
+    // Notes — coaching notes only (no personal note section)
+    const coachNotes=noteItems.filter(([,n])=>n.isCoach);
+    const notesHtml=`<div class="dash-section-title">Coaching notes</div>
+      <div class="card" style="padding:16px;margin-bottom:16px">
+        ${coachNotes.length?coachNotes.map(([key,n])=>`<div class="note-bubble coach-note">
+          <div class="note-author"><span>🏅 ${esc(n.authorName||'Coach')}</span><span>${n.ts?new Date(n.ts).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'}):''}</span></div>
+          <div class="note-text">${esc(n.text)}</div>
+          ${isCoach?`<button class="btn btn-sm btn-danger btn-ghost" style="margin-top:6px;font-size:11px;padding:3px 8px" onclick="deleteNote('${p.uid}','${key}')">Delete</button>`:''}
+        </div>`).join(''):`<div style="color:var(--text-3);font-size:13px">No coaching notes yet.</div>`}
+        ${isCoach?`<div style="${coachNotes.length?'margin-top:14px;padding-top:14px;border-top:1px solid var(--border)':''}">
+          <textarea id="pf-coach-note" style="min-height:70px;resize:vertical;font-size:14px" placeholder="Add coaching feedback, technique notes…"></textarea>
+          <button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="saveCoachNote('${p.uid}')">Add note</button>
+        </div>`:''}
+      </div>`;
+
+    C.innerHTML=`${threshBanner}
       <div class="card" style="padding:24px;margin-bottom:16px;max-width:720px">
         <div style="display:flex;align-items:center;gap:18px;margin-bottom:18px;flex-wrap:wrap">
           <div style="width:68px;height:68px;border-radius:50%;background:var(--accent-bg);color:var(--accent-text);font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${initials(p.name)}</div>
           <div>
             <div style="font-size:22px;font-weight:800;letter-spacing:-0.4px">${esc(p.name)}</div>
-            <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">
-              ${roleBadge(p.role)}
-              ${sides.map(s=>`<span class="badge" style="background:${s==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${s==='Left'?'var(--accent-text)':'var(--success-text)'}">${s}</span>`).join('')}
-              ${roles.map(r=>`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);border:1px solid var(--border)">${r}</span>`).join('')}
-            </div>
+            <div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">${roleBadge(p.role)}${sides.map(s=>`<span class="badge" style="background:${s==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${s==='Left'?'var(--accent-text)':'var(--success-text)'}">${s}</span>`).join('')}${roles.map(r=>`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);border:1px solid var(--border)">${r}</span>`).join('')}</div>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;font-size:14px;margin-bottom:12px">
@@ -2032,100 +2105,49 @@ function pgProfile() {
           <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Weight</div><div>${p.weight?p.weight+' lbs':'—'}</div></div>
           <div><div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Emergency</div><div style="font-size:13px">${esc(p.emergency||'—')}</div></div>
         </div>
-        <!-- App role info box -->
-        <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:flex-start;gap:10px">
-          <div style="flex:1">
-            <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">App role</div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">${roleBadge(p.role)}<span style="font-size:13px;color:var(--text-2)">${
-              p.role==='admin'  ? 'Full access — manage members, events, lineups, settings' :
-              p.role==='coach'  ? 'Can edit events, manage lineups and RSVPs' :
-              p.role==='tester' ? 'Read-only access to all management views' :
-                                  'Can RSVP to events and view the roster and lineup'
-            }</span></div>
-            <div style="font-size:12px;color:var(--text-3)">🔒 App roles are assigned by an admin. Contact your team admin to request a role change.</div>
-          </div>
+        <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px">
+          <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">App role</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">${roleBadge(p.role)}<span style="font-size:13px;color:var(--text-2)">${p.role==='admin'?'Full access':p.role==='coach'?'Can edit events, lineups and RSVPs':p.role==='tester'?'Read-only management access':'RSVP and view'}</span></div>
+          <div style="font-size:12px;color:var(--text-3)">🔒 App roles are assigned by an admin.</div>
         </div>
       </div>
-
-      <!-- Stats -->
       <div style="max-width:720px">
         <div class="dash-section-title">My statistics</div>
-        <div class="dash-stats" style="margin-bottom:16px">
-          ${statBlock(totalPast, 'Total events', 'var(--text)')}
-          ${statBlock(totalAtt, 'Attended', 'var(--success)')}
-          ${statBlock(attPct!==null?attPct+'%':'—', 'Overall rate', attPct===null?'var(--text-3)':attPct>=80?'var(--success)':attPct>=50?'var(--warning)':'var(--danger)')}
-          ${statBlock(pendingRsvp, 'Awaiting RSVP', pendingRsvp>0?'var(--warning)':'var(--text-3)')}
-        </div>
+        <div class="dash-stats" style="margin-bottom:16px">${statBlock(totalPast,'Total events','var(--text)')}${statBlock(totalAtt,'Attended','var(--success)')}${statBlock(attPct!=null?attPct+'%':'—','Overall rate',attPct==null?'var(--text-3)':attPct>=80?'var(--success)':attPct>=50?'var(--warning)':'var(--danger)')}${statBlock(pendingRsvp,'Awaiting RSVP',pendingRsvp>0?'var(--warning)':'var(--text-3)')}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
-          <div class="card" style="padding:16px">
-            <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🚣 Practices</div>
-            <div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${practicePct===null?'var(--text-3)':practicePct>=80?'var(--success)':practicePct>=50?'var(--warning)':'var(--danger)'}">${practicePct!==null?practicePct+'%':'—'}</div>
-            <div style="font-size:13px;color:var(--text-3);margin-top:2px">${attPractices} / ${pastPractices.length} attended</div>
-          </div>
-          <div class="card" style="padding:16px">
-            <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🏁 Races</div>
-            <div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${racePct===null?'var(--text-3)':racePct>=80?'var(--success)':racePct>=50?'var(--warning)':'var(--danger)'}">${racePct!==null?racePct+'%':'—'}</div>
-            <div style="font-size:13px;color:var(--text-3);margin-top:2px">${attRaces} / ${pastRaces.length} attended</div>
-          </div>
-          <div class="card" style="padding:16px">
-            <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🦦 S.O.C.I.A.L</div>
-            <div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${socialPct===null?'var(--text-3)':socialPct>=80?'var(--success)':socialPct>=50?'var(--warning)':'var(--danger)'}">${socialPct!==null?socialPct+'%':'—'}</div>
-            <div style="font-size:13px;color:var(--text-3);margin-top:2px">${attSocials} / ${pastSocials.length} attended</div>
-          </div>
+          <div class="card" style="padding:16px"><div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🚣 Practices</div><div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${practicePct==null?'var(--text-3)':practicePct>=(threshold||80)?'var(--success)':practicePct>=(threshold||80)*0.75?'var(--warning)':'var(--danger)'}">${practicePct!=null?practicePct+'%':'—'}</div><div style="font-size:13px;color:var(--text-3);margin-top:2px">${attPractices} / ${pastPractices.length} attended</div></div>
+          <div class="card" style="padding:16px"><div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🏁 Races</div><div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${racePct==null?'var(--text-3)':racePct>=80?'var(--success)':racePct>=50?'var(--warning)':'var(--danger)'}">${racePct!=null?racePct+'%':'—'}</div><div style="font-size:13px;color:var(--text-3);margin-top:2px">${attRaces} / ${pastRaces.length} attended</div></div>
+          <div class="card" style="padding:16px"><div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🦦 S.O.C.I.A.L</div><div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${socialPct==null?'var(--text-3)':socialPct>=80?'var(--success)':socialPct>=50?'var(--warning)':'var(--danger)'}">${socialPct!=null?socialPct+'%':'—'}</div><div style="font-size:13px;color:var(--text-3);margin-top:2px">${attSocials} / ${pastSocials.length} attended</div></div>
         </div>
-
-        <!-- Upcoming commitment -->
         <div class="card" style="padding:16px;margin-bottom:20px">
-          <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Upcoming commitment</div>
+          <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Upcoming</div>
           <div style="display:flex;gap:20px;flex-wrap:wrap">
             <div><span style="font-size:22px;font-weight:800;color:var(--success)">${upcomingGoing}</span><span style="font-size:13px;color:var(--text-3);margin-left:4px">confirmed going</span></div>
             <div><span style="font-size:22px;font-weight:800;color:var(--warning)">${pendingRsvp}</span><span style="font-size:13px;color:var(--text-3);margin-left:4px">no reply yet</span></div>
-            <div><span style="font-size:22px;font-weight:800;color:var(--text)">${upcoming.length}</span><span style="font-size:13px;color:var(--text-3);margin-left:4px">total upcoming</span></div>
+            <div><span style="font-size:22px;font-weight:800">${upcoming.length}</span><span style="font-size:13px;color:var(--text-3);margin-left:4px">total upcoming</span></div>
           </div>
         </div>
-
-        <!-- Recent history -->
-        ${recent6.length ? `<div class="dash-section-title">Recent history</div>
-        <div class="past-events-table" style="margin-bottom:20px">
-          <table style="width:100%;border-collapse:collapse;font-size:14px">
-            <thead><tr>
-              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Event</th>
-              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Date</th>
-              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Attended</th>
-            </tr></thead>
-            <tbody>${recent6.map(ev=>{
-              const r=(ev.rsvps||{})[p.uid];
-              const pill=r==='yes'?`<span class="rsvp-status-pill yes">✓ Yes</span>`:r==='no'?`<span class="rsvp-status-pill no">✗ No</span>`:`<span class="rsvp-status-pill pending">— No reply</span>`;
-              return `<tr style="border-bottom:1px solid var(--border)">
-                <td style="padding:10px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge ${evBadgeClass(ev.type)}" style="font-size:10px">${ev.type}</span></td>
-                <td style="padding:10px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td>
-                <td style="padding:10px 16px;text-align:center">${pill}</td>
-              </tr>`;
-            }).join('')}</tbody>
-          </table>
-        </div>` : ''}
-
-        <!-- Edit form -->
+        ${recent6.length?`<div class="dash-section-title">Recent history</div>
+        <div class="past-events-table" style="margin-bottom:20px"><table style="width:100%;border-collapse:collapse;font-size:14px">
+          <thead><tr>
+            <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Event</th>
+            <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Date</th>
+            <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Attended</th>
+          </tr></thead>
+          <tbody>${recent6.map(ev=>{const r=(ev.rsvps||{})[p.uid];const pill=r==='yes'?'<span class="rsvp-status-pill yes">✓ Yes</span>':r==='no'?'<span class="rsvp-status-pill no">✗ No</span>':'<span class="rsvp-status-pill pending">— No reply</span>';return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge ${evBadgeClass(ev.type)}" style="font-size:10px">${ev.type}</span></td><td style="padding:10px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td><td style="padding:10px 16px;text-align:center">${pill}</td></tr>`;}).join('')}</tbody>
+        </table></div>`:''}
+        ${mediaHtml}
+        ${notesHtml}
         <div class="dash-section-title">Edit my info</div>
-        <div class="card" style="padding:20px">
+        <div class="card" style="padding:20px;margin-bottom:20px">
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap">
             <div>
               <div class="form-group"><label class="form-label">Weight (lbs)</label><input id="pf-weight" type="number" value="${esc(p.weight||'')}" placeholder="150"></div>
               <div class="form-group"><label class="form-label">Emergency contact</label><input id="pf-emerg" value="${esc(p.emergency||'')}" placeholder="Name · Phone"></div>
             </div>
             <div>
-              <div class="form-group">
-                <label class="form-label">Paddle sides</label>
-                <div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">
-                  ${['Left','Right','Both'].map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-side-${s.toLowerCase()}" ${sides.includes(s)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${s}</label>`).join('')}
-                </div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Boat positions</label>
-                <div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">
-                  ${['Paddler','Drummer','Steers'].map(pos=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-pos-${pos.toLowerCase()}" ${roles.includes(pos)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`).join('')}
-                </div>
-              </div>
+              <div class="form-group"><label class="form-label">Paddle sides</label><div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">${['Left','Right','Both'].map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-side-${s.toLowerCase()}" ${sides.includes(s)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${s}</label>`).join('')}</div></div>
+              <div class="form-group"><label class="form-label">Boat positions</label><div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">${['Paddler','Drummer','Steers'].map(pos=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-pos-${pos.toLowerCase()}" ${roles.includes(pos)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`).join('')}</div></div>
             </div>
           </div>
           <button class="btn btn-primary" style="margin-top:8px" onclick="saveProfile()">Save changes</button>
@@ -2134,17 +2156,66 @@ function pgProfile() {
   });
 }
 
+window.uploadProfileMedia = async function(memberUid, input) {
+  if (!can.edit()) return;
+  const progress = document.getElementById('upload-progress');
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  if (progress) progress.textContent = `Uploading ${files.length} file${files.length>1?'s':''}…`;
+  for (const file of files) {
+    if (file.size > 10*1024*1024) { showToast(`${file.name} too large (max 10MB)`,'⚠️'); continue; }
+    const dataUrl = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsDataURL(file); });
+    const key = db.ref('profileMedia/'+memberUid).push().key;
+    await db.ref('profileMedia/'+memberUid+'/'+key).set({ url:dataUrl, type:file.type, name:file.name, addedAt:Date.now(), addedBy:currentUser.uid });
+  }
+  if (progress) progress.textContent='';
+  showToast('Uploaded!','📸');
+  input.value='';
+  pgProfile();
+};
+
+window.deleteMedia = async function(memberUid, key) {
+  if (!can.edit()) return;
+  if (!confirm('Remove this photo/video?')) return;
+  await db.ref('profileMedia/'+memberUid+'/'+key).remove();
+  showToast('Removed','🗑');
+  pgProfile();
+};
+
+window.openMediaViewer = function(url, type) {
+  closeModal();
+  const overlay=document.createElement('div'); overlay.className='overlay';
+  overlay.style.cssText='background:rgba(0,0,0,0.92);cursor:pointer';
+  overlay.addEventListener('click',closeModal);
+  const el=type==='video'?`<video src="${url}" controls autoplay style="max-width:95vw;max-height:88vh;border-radius:8px"></video>`:`<img src="${url}" style="max-width:95vw;max-height:88vh;border-radius:8px;object-fit:contain">`;
+  overlay.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;gap:12px" onclick="event.stopPropagation()">${el}<button class="btn" onclick="closeModal()" style="background:rgba(255,255,255,0.15);color:#fff;border-color:rgba(255,255,255,0.3)">✕ Close</button></div>`;
+  document.body.appendChild(overlay); modalEl=overlay;
+};
+
+window.saveCoachNote = async function(memberUid) {
+  if (!can.edit()) return;
+  const text=document.getElementById('pf-coach-note')?.value?.trim();
+  if (!text) { showToast('Note is empty','⚠️'); return; }
+  const key=db.ref('profileNotes/'+memberUid).push().key;
+  await db.ref('profileNotes/'+memberUid+'/'+key).set({ uid:currentUser.uid, authorName:currentProfile.name, text, ts:Date.now(), isCoach:true });
+  showToast('Coaching note added ✓');
+  pgProfile();
+};
+
+window.deleteNote = async function(memberUid, key) {
+  if (!can.edit()) return;
+  if (!confirm('Delete this note?')) return;
+  await db.ref('profileNotes/'+memberUid+'/'+key).remove();
+  showToast('Note deleted','🗑');
+  pgProfile();
+};
+
 window.saveProfile = async function() {
-  const uid = currentUser.uid;
-  const updates = {
-    weight:      document.getElementById('pf-weight').value,
-    sides:       ['Left','Right','Both'].filter(s => document.getElementById('pf-side-'+s.toLowerCase())?.checked),
-    paddlerRoles:['Paddler','Drummer','Steers'].filter(p => document.getElementById('pf-pos-'+p.toLowerCase())?.checked),
-    emergency:   document.getElementById('pf-emerg').value.trim(),
-  };
+  const uid=currentUser.uid;
+  const updates={ weight:document.getElementById('pf-weight').value, sides:['Left','Right','Both'].filter(s=>document.getElementById('pf-side-'+s.toLowerCase())?.checked), paddlerRoles:['Paddler','Drummer','Steers'].filter(p=>document.getElementById('pf-pos-'+p.toLowerCase())?.checked), emergency:document.getElementById('pf-emerg').value.trim() };
   await db.ref('users/'+uid).update(updates);
-  const snap = await db.ref('users/'+uid).get();
-  currentProfile = snap.val();
+  const snap=await db.ref('users/'+uid).get();
+  currentProfile=snap.val();
   renderSidebarUser();
   showToast('Profile saved ✓');
 };
@@ -2215,19 +2286,20 @@ function pgRoster() {
 
 function showInviteModal() {
   closeModal();
+  const joinUrl = APP_URL + '#join';
   const overlay = document.createElement('div'); overlay.className = 'overlay';
   overlay.addEventListener('click', e => { if(e.target===overlay) closeModal(); });
-  overlay.innerHTML = `<div class="modal">
-    <div class="modal-header">
-      <div><div class="modal-title">🔗 Invite new members</div><div class="modal-sub">Share this link — it takes them straight to the join page</div></div>
+  overlay.innerHTML = `<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+    <div class="modal-header" style="flex-shrink:0">
+      <div><div class="modal-title">🔗 Invite new members</div><div class="modal-sub">Share this link — opens the join page directly</div></div>
       <button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button>
     </div>
     <div class="modal-body">
-      <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px;font-size:14px;font-family:monospace;word-break:break-all;margin-bottom:12px">${APP_URL}</div>
-      <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">When someone opens this link they'll see the sign-in page with the "Join team" tab. After they register, you approve them in <strong>Approvals</strong> and set their role.</p>
+      <div style="background:var(--surface-alt);border:1px solid var(--accent);border-radius:var(--radius);padding:12px 16px;font-size:14px;font-family:monospace;word-break:break-all;margin-bottom:12px;color:var(--accent-text)">${joinUrl}</div>
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">When someone opens this link they'll land directly on the <strong>Join team</strong> sign-up tab. After they register, approve them in <strong>Approvals</strong> and assign their role.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="navigator.clipboard.writeText('${APP_URL}').then(()=>showToast('Link copied!','🔗'))">Copy link</button>
-        <a class="btn" href="mailto:?subject=Join ${TEAM_NAME_DEFAULT} on OtterChaos&body=Hey! Join our dragon boat team app here: ${APP_URL}" target="_blank">Share via email ↗</a>
+        <button class="btn btn-primary" onclick="navigator.clipboard.writeText('${joinUrl}').then(()=>showToast('Invite link copied!','🔗')).catch(()=>showToast('Copy the link above manually'))">Copy link</button>
+        <a class="btn" href="mailto:?subject=Join ${TEAM_NAME_DEFAULT} on OtterChaos&body=Hey! Click this link to join our dragon boat team: ${joinUrl}" target="_blank">Share via email ↗</a>
       </div>
     </div>
   </div>`;
@@ -2733,54 +2805,179 @@ function pgAttendance() {
 
   Promise.all([db.ref('users').get(), db.ref('events').get()]).then(([uSnap,evSnap]) => {
     const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
-    // Only past practices up to today
     const events  = Object.values(evSnap.val()||{})
       .filter(e => e.type === 'Practice' && e.date < today())
       .sort((a,b)=>a.date.localeCompare(b.date));
 
-    if (!members.length||!events.length) {
+    if (!members.length || !events.length) {
       C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">${events.length===0?'No past practices yet':'No members yet'}</div></div></div>`;
       return;
     }
 
-    const headCols = events.map(ev=>`<th style="text-align:center;min-width:72px">
-      <div style="font-size:11px">${esc(ev.name.length>11?ev.name.slice(0,11)+'…':ev.name)}</div>
+    // Pre-compute per-member stats
+    const memberStats = members.map(m => {
+      const attended = events.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+      const pct = Math.round(attended/events.length*100);
+      return { ...m, attended, pct };
+    });
+
+    // Per-event team attendance counts
+    const eventStats = events.map(ev => {
+      const yes = members.filter(m=>(ev.rsvps||{})[m.uid]==='yes').length;
+      return { ...ev, yes, pct: Math.round(yes/members.length*100) };
+    });
+
+    C.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
+        <label style="font-size:14px;font-weight:700;color:var(--text-2)">View:</label>
+        <select id="att-view-sel" onchange="renderAttView(this.value)" style="max-width:260px">
+          <option value="individual">Individual tracking</option>
+          <option value="team">Team attendance</option>
+        </select>
+      </div>
+      <div id="att-view-body"></div>`;
+
+    // Store data for tab switching
+    window._attData = { members, memberStats, events, eventStats };
+    renderAttView('individual');
+  });
+}
+
+window.renderAttView = function(view) {
+  const body = document.getElementById('att-view-body'); if(!body) return;
+  const { members, memberStats, events, eventStats } = window._attData;
+  const sel = document.getElementById('att-view-sel'); if(sel) sel.value = view;
+
+  if (view === 'individual') {
+    // ── Individual tracking: grid table + member bar chart ──
+    const headCols = events.map(ev=>`<th style="text-align:center;min-width:68px;padding:8px 6px">
+      <div style="font-size:10px;font-weight:700;color:var(--text-3)">${esc(ev.name.length>10?ev.name.slice(0,10)+'…':ev.name)}</div>
       <div style="font-weight:400;color:var(--text-3);font-size:10px">${fmtDateS(ev.date)}</div>
     </th>`).join('');
 
-    const rows = members.map(m=>{
-      let att=0,pt=events.length;
+    const rows = memberStats.map(m=>{
       const cells=events.map(ev=>{
         const r=(ev.rsvps||{})[m.uid];
-        if(r==='yes')att++;
-        return `<td style="text-align:center">${r==='yes'?'<span style="color:var(--success);font-size:16px">✓</span>':r==='no'?'<span style="color:var(--danger);font-size:16px">✗</span>':'<span style="color:var(--border-strong)">—</span>'}</td>`;
+        return `<td style="text-align:center">${r==='yes'?'<span style="color:var(--success);font-size:15px">✓</span>':r==='no'?'<span style="color:var(--danger);font-size:15px">✗</span>':'<span style="color:var(--border-strong)">—</span>'}</td>`;
       }).join('');
-      const pct=pt>0?Math.round(att/pt*100):null;
       return `<tr>
-        <td style="position:sticky;left:0;background:var(--surface);z-index:2;border-right:1px solid var(--border);min-width:150px">
-          <div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler']).join(', '))}</div></div></div>
+        <td style="position:sticky;left:0;background:var(--surface);z-index:2;border-right:1px solid var(--border);min-width:150px;padding:10px 14px">
+          <div class="member-cell"><div class="avatar">${initials(m.name)}</div><div><div class="mname">${esc(m.name)}</div><div class="msub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:['Paddler']).join(', '))}</div></div></div>
         </td>
         ${cells}
-        <td style="text-align:center;position:sticky;right:0;background:var(--surface);z-index:2;border-left:1px solid var(--border)">${pct!==null?`<span class="pct-chip" style="background:${pctBg(pct)};color:${pctColor(pct)}">${pct}%</span>`:'—'}</td>
+        <td style="text-align:center;position:sticky;right:0;background:var(--surface);z-index:2;border-left:1px solid var(--border);padding:10px 8px">
+          <span class="pct-chip" style="background:${pctBg(m.pct)};color:${pctColor(m.pct)}">${m.pct}%</span>
+        </td>
       </tr>`;
     }).join('');
 
-    C.innerHTML=`
-      <div style="font-size:13px;color:var(--text-3);margin-bottom:12px">Showing ${events.length} past practice${events.length!==1?'s':''} up to today · Scroll horizontally to see all</div>
+    // Member attendance bar chart
+    const chartBars = [...memberStats].sort((a,b)=>b.pct-a.pct).map(m => {
+      const col = m.pct>=80?'var(--success)':m.pct>=50?'var(--warning)':'var(--danger)';
+      return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:110px;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">${esc(m.name.split(' ')[0])}</div>
+        <div style="flex:1;background:var(--surface-alt);border-radius:4px;height:20px;overflow:hidden">
+          <div style="width:${m.pct}%;height:100%;background:${col};border-radius:4px;transition:width 0.5s;display:flex;align-items:center;padding-left:6px;min-width:${m.pct>5?'0':'28px'}">
+            <span style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap">${m.pct}%</span>
+          </div>
+        </div>
+        <div style="width:36px;font-size:12px;color:var(--text-3);text-align:right;flex-shrink:0">${m.attended}/${events.length}</div>
+      </div>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="card" style="padding:16px;margin-bottom:16px">
+        <div class="dash-section-title" style="margin:0 0 12px">Attendance by member</div>
+        ${chartBars}
+      </div>
+      <div style="font-size:13px;color:var(--text-3);margin-bottom:8px">Detailed grid — ${events.length} past practice${events.length!==1?'s':''} · Scroll right to see all →</div>
       <div style="overflow-x:auto;border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow)">
         <table style="width:max-content;min-width:100%;border-collapse:collapse;font-size:14px;background:var(--surface)">
-          <thead style="position:sticky;top:0;z-index:3">
-            <tr>
-              <th style="position:sticky;left:0;z-index:4;background:var(--surface-alt);border-bottom:1px solid var(--border);border-right:1px solid var(--border);min-width:150px;padding:11px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Member</th>
-              ${headCols}
-              <th style="position:sticky;right:0;z-index:4;background:var(--surface-alt);border-bottom:1px solid var(--border);border-left:1px solid var(--border);padding:11px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Overall</th>
-            </tr>
-          </thead>
+          <thead style="position:sticky;top:0;z-index:3"><tr>
+            <th style="position:sticky;left:0;z-index:4;background:var(--surface-alt);border-bottom:1px solid var(--border);border-right:1px solid var(--border);min-width:150px;padding:10px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Member</th>
+            ${headCols}
+            <th style="position:sticky;right:0;z-index:4;background:var(--surface-alt);border-bottom:1px solid var(--border);border-left:1px solid var(--border);padding:10px 10px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em">Overall</th>
+          </tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>`;
-  });
-}
+
+  } else {
+    // ── Team attendance: per-event bar chart + summary ──
+    const avgPct = Math.round(eventStats.reduce((a,e)=>a+e.pct,0)/eventStats.length);
+    const maxPct = Math.max(...eventStats.map(e=>e.pct));
+    const minPct = Math.min(...eventStats.map(e=>e.pct));
+
+    // Bar chart — vertical bars for each practice
+    const barW = Math.max(28, Math.min(56, Math.floor(560/eventStats.length)));
+    const chartHeight = 180;
+    const bars = eventStats.map((ev,i) => {
+      const col = ev.pct>=80?'var(--success)':ev.pct>=50?'var(--warning)':'var(--danger)';
+      const barH = Math.round((ev.pct/100)*chartHeight);
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;width:${barW}px;flex-shrink:0">
+        <div style="font-size:11px;font-weight:700;color:var(--text-2)">${ev.pct}%</div>
+        <div style="width:${barW-8}px;height:${chartHeight}px;display:flex;align-items:flex-end">
+          <div title="${esc(ev.name)}: ${ev.yes}/${members.length} (${ev.pct}%)"
+            style="width:100%;height:${barH}px;background:${col};border-radius:4px 4px 0 0;cursor:pointer;transition:opacity 0.15s;min-height:2px"
+            onmouseover="this.style.opacity='.75'" onmouseout="this.style.opacity='1'"></div>
+        </div>
+        <div style="font-size:9px;color:var(--text-3);text-align:center;width:${barW}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtDateS(ev.date)}</div>
+      </div>`;
+    }).join('');
+
+    // Trend line (last 5 vs first 5)
+    const first5 = eventStats.slice(0,Math.min(5,eventStats.length));
+    const last5  = eventStats.slice(-Math.min(5,eventStats.length));
+    const firstAvg = Math.round(first5.reduce((a,e)=>a+e.pct,0)/first5.length);
+    const lastAvg  = Math.round(last5.reduce((a,e)=>a+e.pct,0)/last5.length);
+    const trend = lastAvg > firstAvg+3 ? '↑ Improving' : lastAvg < firstAvg-3 ? '↓ Declining' : '→ Steady';
+    const trendColor = lastAvg > firstAvg+3 ? 'var(--success)' : lastAvg < firstAvg-3 ? 'var(--danger)' : 'var(--text-2)';
+
+    // Recent practices table
+    const recentRows = [...eventStats].reverse().slice(0,8).map(ev=>`<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:10px 16px;font-weight:600">${esc(ev.name)}</td>
+      <td style="padding:10px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td>
+      <td style="padding:10px 16px;text-align:center">${ev.yes} / ${members.length}</td>
+      <td style="padding:10px 16px;text-align:center"><span class="pct-chip" style="background:${pctBg(ev.pct)};color:${pctColor(ev.pct)}">${ev.pct}%</span></td>
+    </tr>`).join('');
+
+    body.innerHTML = `
+      <div class="dash-stats" style="margin-bottom:16px">
+        <div class="dash-stat"><div class="dash-stat-val" style="color:var(--accent)">${avgPct}%</div><div class="dash-stat-label">Avg attendance</div></div>
+        <div class="dash-stat"><div class="dash-stat-val" style="color:var(--success)">${maxPct}%</div><div class="dash-stat-label">Best practice</div></div>
+        <div class="dash-stat"><div class="dash-stat-val" style="color:var(--danger)">${minPct}%</div><div class="dash-stat-label">Lowest practice</div></div>
+        <div class="dash-stat"><div class="dash-stat-val" style="color:${trendColor};font-size:18px">${trend}</div><div class="dash-stat-label">Trend</div></div>
+      </div>
+
+      <div class="card" style="padding:20px;margin-bottom:16px">
+        <div class="dash-section-title" style="margin:0 0 12px">Team attendance per practice</div>
+        <!-- Gridlines -->
+        <div style="position:relative;margin-bottom:4px">
+          ${[100,75,50,25].map(g=>`<div style="position:absolute;left:0;right:0;top:${Math.round((1-g/100)*chartHeight)}px;border-top:1px dashed var(--border);z-index:0">
+            <span style="font-size:9px;color:var(--text-3);position:absolute;left:-26px;top:-6px">${g}%</span>
+          </div>`).join('')}
+          <div style="display:flex;align-items:flex-end;gap:4px;overflow-x:auto;padding:0 28px 0 28px;padding-bottom:0;-webkit-overflow-scrolling:touch;position:relative;z-index:1">
+            ${bars}
+          </div>
+        </div>
+        <!-- Average line label -->
+        <div style="font-size:12px;color:var(--text-3);margin-top:8px;padding-left:28px">Average: <strong style="color:var(--accent)">${avgPct}%</strong> across ${eventStats.length} practices</div>
+      </div>
+
+      <div class="card" style="padding:0;margin-bottom:16px">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);font-size:14px;font-weight:700">Recent practices</div>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <thead><tr>
+            <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Practice</th>
+            <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Date</th>
+            <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Showed up</th>
+            <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Rate</th>
+          </tr></thead>
+          <tbody>${recentRows}</tbody>
+        </table>
+      </div>`;
+  }
+};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // REMINDERS
@@ -2943,6 +3140,11 @@ function pgSettings() {
         <div style="font-size:16px;font-weight:700;margin-bottom:16px">Team identity</div>
         <div class="form-group"><label class="form-label">Team name</label><input id="s-name" value="${esc(s.teamName||TEAM_NAME_DEFAULT)}"></div>
         <div class="form-group">
+          <label class="form-label">Minimum attendance threshold (%)</label>
+          <input id="s-threshold" type="number" min="0" max="100" value="${esc(s.attendanceThreshold||'')}" placeholder="e.g. 75">
+          <div style="font-size:12px;color:var(--text-3);margin-top:4px">Paddlers below this practice attendance % will see a warning on their profile. 0%–60% of threshold = 🔴 red, 60%–80% = 🟡 yellow, 80%–100% = 🟢 green. Leave blank to disable.</div>
+        </div>
+        <div class="form-group">
           <label class="form-label">Team logo</label>
           <div id="logo-preview" style="margin-bottom:10px;${s.logoUrl?'':'display:none'}">
             <img id="logo-preview-img" src="${esc(s.logoUrl||'')}" alt="Current logo" style="max-height:80px;max-width:220px;object-fit:contain;border-radius:8px;border:1px solid var(--border);padding:6px;background:var(--surface-alt)">
@@ -3012,7 +3214,12 @@ window.saveSettings = async () => {
   const name = document.getElementById('s-name').value.trim();
   if (!name) { alert('Team name is required.'); return; }
   const logoUrl = document.getElementById('s-logo-url').value.trim();
-  await db.ref('settings').update({ teamName: name, logoUrl: logoUrl||'' });
+  const threshRaw = document.getElementById('s-threshold')?.value?.trim();
+  const attendanceThreshold = threshRaw ? Number(threshRaw) : null;
+  const settingsUpdate = { teamName: name, logoUrl: logoUrl||'' };
+  if (attendanceThreshold !== null) settingsUpdate.attendanceThreshold = attendanceThreshold;
+  else settingsUpdate.attendanceThreshold = null;
+  await db.ref('settings').update(settingsUpdate);
   applyLogo(logoUrl);
   showToast('Settings saved','✓');
 };
