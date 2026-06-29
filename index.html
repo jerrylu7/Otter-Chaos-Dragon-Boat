@@ -492,6 +492,16 @@ tbody tr:hover td { background: var(--surface-alt); }
 .att-banner-red    { background: var(--danger-bg);  color: var(--danger-text);  border: 1px solid var(--danger); }
 .att-banner-yellow { background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning); }
 .att-banner-green  { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success); }
+
+/* ── New feature styles ── */
+.msg-bubble { padding:12px 14px; border-radius:12px; margin-bottom:8px; max-width:85%; word-break:break-word; line-height:1.5; font-size:14px; }
+.msg-bubble.sent { background:var(--accent-bg); color:var(--accent-text); margin-left:auto; border-bottom-right-radius:3px; }
+.msg-bubble.recv { background:var(--surface-alt); color:var(--text); margin-right:auto; border-bottom-left-radius:3px; }
+.msg-time { font-size:11px; color:var(--text-3); margin-top:3px; }
+.goal-bar-wrap { background:var(--surface-alt); border-radius:6px; height:12px; overflow:hidden; margin-top:6px; }
+.goal-bar { height:100%; border-radius:6px; transition:width 0.5s; }
+.debrief-card { background:var(--surface-alt); border-left:3px solid var(--accent); border-radius:var(--radius); padding:12px 14px; margin-bottom:8px; }
+.push-banner { background:var(--warning-bg); border:1px solid var(--warning); border-radius:10px; padding:12px 16px; margin-bottom:16px; display:flex; align-items:center; gap:10px; font-size:13px; color:var(--warning-text); }
 .dash-empty { text-align: center; padding: 32px 16px; color: var(--text-3); font-size: 14px; }
 
 .toast { position: fixed; bottom: 24px; right: 24px; background: #1a1916; color: #f5f4f0; padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 600; box-shadow: var(--shadow-md); z-index: 999; animation: toastIn 0.2s ease; display: flex; align-items: center; gap: 8px; }
@@ -1129,14 +1139,17 @@ function buildSidebar() {
   ];
 
   const adminPages = [
-    { id:'announcements', icon:'📣', label:'Announcements', badge:'ann-badge' },
+    { id:'announcements', icon:'📣', label:'Announcements',  badge:'ann-badge' },
     { id:'lineup',        icon:'📋', label:'Lineup' },
     { id:'attendance',    icon:'✅', label:'Attendance' },
     { id:'leaderboard',   icon:'🏅', label:'Leaderboard' },
     { id:'season',        icon:'📊', label:'Season Summary' },
+    { id:'messaging',     icon:'💬', label:'Messages',       badge:'msg-badge' },
+    { id:'changelog',     icon:'📜', label:'Change log',     adminOnly:true },
+    { id:'bulkevent',     icon:'📆', label:'Bulk events',    editOnly:true },
     { id:'reminders',     icon:'✉️',  label:'Reminders' },
-    { id:'approvals',     icon:'🔐', label:'Approvals',  adminOnly:true, badge:'approve-badge' },
-    { id:'settings',      icon:'⚙️',  label:'Settings',   adminOnly:true },
+    { id:'approvals',     icon:'🔐', label:'Approvals',      adminOnly:true, badge:'approve-badge' },
+    { id:'settings',      icon:'⚙️',  label:'Settings',       adminOnly:true },
   ];
 
   function addDivider(label) {
@@ -1148,6 +1161,7 @@ function buildSidebar() {
 
   function addPage(p) {
     if (p.adminOnly && !can.admin()) return;
+    if (p.editOnly  && !can.edit())  return;
     if (p.editOnly  && !can.edit())  return;
     const btn = document.createElement('button');
     btn.className = 'nav-item'; btn.id = 'nav-'+p.id;
@@ -1179,6 +1193,14 @@ function buildSidebar() {
     if (!badge) return;
     const lastSeen = Number(localStorage.getItem('ann-last-seen')||0);
     const unread = Object.values(snap.val()||{}).filter(a=>a.ts>lastSeen).length;
+    badge.textContent = unread; badge.style.display = unread ? 'inline-flex' : 'none';
+  });
+  // Messages unread badge
+  db.ref('messages').orderByChild('toUid').equalTo(currentUser.uid).on('value', snap => {
+    const badge = document.getElementById('msg-badge');
+    if (!badge) return;
+    const lastSeen = Number(localStorage.getItem('msg-last-seen-'+currentUser.uid)||0);
+    const unread = Object.values(snap.val()||{}).filter(m=>m.ts>lastSeen).length;
     badge.textContent = unread; badge.style.display = unread ? 'inline-flex' : 'none';
   });
   if (can.admin()) {
@@ -1256,7 +1278,9 @@ const PAGE_META = {
   attendance:    { title:'Attendance',         sub:'Track who shows up' },
   leaderboard:   { title:'Leaderboard',        sub:'Top attendees this season' },
   season:        { title:'Season Summary',     sub:'End-of-season stats for the team' },
-  reminders:     { title:'Reminders',          sub:'Email members who haven\'t responded' },
+  messaging:     { title:'Messages',          sub:'Direct messages between coaches and paddlers' },
+  changelog:     { title:'Change log',         sub:'Recent admin and coach actions' },
+  bulkevent:     { title:'Bulk event creator', sub:'Add multiple practices at once' },
   approvals:     { title:'Approvals',          sub:'Manage member access and roles' },
   settings:      { title:'Settings',           sub:'Team configuration' },
 };
@@ -1291,6 +1315,7 @@ function navigate(page) {
      announcements:pgAnnouncements, raceday:pgRaceDay, availability:pgAvailability,
      profile:pgProfile, roster:pgRoster, lineup:pgLineup, events:pgEvents,
      attendance:pgAttendance, leaderboard:pgLeaderboard, season:pgSeasonSummary,
+     messaging:pgMessaging, changelog:pgChangeLog, bulkevent:pgBulkEvent,
      reminders:pgReminders, approvals:pgApprovals, settings:pgSettings })[page]?.();
 }
 
@@ -2453,7 +2478,8 @@ function pgProfile() {
     db.ref('profileNotes/'+p.uid).get(),
     db.ref('settings/attendanceThreshold').get(),
     db.ref('availability/'+p.uid).get(),
-  ]).then(([evSnap, lSnap, mediaSnap, notesSnap, threshSnap, avSnap]) => {
+    db.ref('users/'+p.uid+'/goals').get(),
+  ]).then(([evSnap, lSnap, mediaSnap, notesSnap, threshSnap, avSnap, goalsSnap]) => {
     const allEvs   = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
     const lineups  = lSnap.val()||{};
     const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
@@ -4412,6 +4438,680 @@ pgDashboard=function(){
   // After dashboard renders, add announcement banner
   setTimeout(renderAnnouncementBanner,400);
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UNDO SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+let _undoTimer = null;
+function showUndo(label, fn) {
+  document.querySelectorAll('.undo-toast').forEach(e=>e.remove());
+  if (_undoTimer) clearTimeout(_undoTimer);
+  const t = document.createElement('div'); t.className='undo-toast';
+  t.innerHTML = `<span>${esc(label)}</span><button class="undo-btn" onclick="this.closest('.undo-toast').remove();clearTimeout(window._undoTimer);(${fn.toString()})()">Undo</button>`;
+  document.body.appendChild(t);
+  _undoTimer = setTimeout(()=>t.remove(), 6000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// LINEUP TEMPLATES
+// ═══════════════════════════════════════════════════════════════════════════════
+async function saveLineupTemplate(evId) {
+  if (!can.edit()) return;
+  const name = prompt('Template name (e.g. "Race Day A Team"):');
+  if (!name) return;
+  const snap = await db.ref('lineups/'+evId).get();
+  const lineup = snap.val()||{};
+  if (!Object.keys(lineup).length) { showToast('Lineup is empty','⚠️'); return; }
+  const key = db.ref('lineupTemplates').push().key;
+  await db.ref('lineupTemplates/'+key).set({ name, lineup, createdAt:Date.now(), createdBy:currentUser.uid, authorName:currentProfile.name });
+  showToast('Template saved: '+name,'📋');
+  logChange('Saved lineup template: '+name);
+}
+
+async function loadLineupTemplate(evId) {
+  if (!can.edit()) return;
+  const snap = await db.ref('lineupTemplates').get();
+  const templates = Object.entries(snap.val()||{}).sort((a,b)=>b[1].createdAt-a[1].createdAt);
+  if (!templates.length) { showToast('No templates saved yet','⚠️'); return; }
+  closeModal();
+  const overlay = document.createElement('div'); overlay.className='overlay';
+  overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+  overlay.innerHTML = `<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+    <div class="modal-header" style="flex-shrink:0"><div class="modal-title">📋 Load lineup template</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      ${templates.map(([key,t])=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--border);gap:10px">
+        <div>
+          <div style="font-weight:600;font-size:14px">${esc(t.name)}</div>
+          <div style="font-size:12px;color:var(--text-3)">${esc(t.authorName||'Coach')} · ${new Date(t.createdAt).toLocaleDateString('en-CA',{month:'short',day:'numeric',year:'numeric'})}</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0">
+          <button class="btn btn-sm btn-primary" onclick="applyLineupTemplate('${evId}','${key}')">Load</button>
+          <button class="btn btn-sm btn-danger btn-ghost" onclick="deleteLineupTemplate('${key}',this.closest('div[style]'))">✕</button>
+        </div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+  document.body.appendChild(overlay); modalEl=overlay;
+}
+
+window.applyLineupTemplate = async function(evId, templateKey) {
+  const snap = await db.ref('lineupTemplates/'+templateKey).get();
+  const t = snap.val(); if (!t) return;
+  const prev = (await db.ref('lineups/'+evId).get()).val()||{};
+  await db.ref('lineups/'+evId).set(t.lineup);
+  closeModal();
+  showToast('Template "'+t.name+'" applied','📋');
+  logChange('Applied lineup template "'+t.name+'" to event '+evId);
+  if (window._evPage) {
+    window._evPage.lineup = t.lineup;
+    renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, t.lineup);
+  }
+  showUndo('Template applied', async ()=>{ await db.ref('lineups/'+evId).set(prev); if(window._evPage){ window._evPage.lineup=prev; renderEvDetailLineup(evId,window._evPage.ev,window._evPage.members,prev); } });
+};
+
+window.deleteLineupTemplate = async function(key, rowEl) {
+  if (!confirm('Delete this template?')) return;
+  await db.ref('lineupTemplates/'+key).remove();
+  rowEl?.remove();
+  showToast('Template deleted','🗑');
+};
+
+// Add template buttons to event page Lineup tab
+function addLineupTemplateButtons(evId) {
+  if (!can.edit()) return;
+  const existing = document.getElementById('lineup-template-bar');
+  if (existing) return;
+  const bar = document.createElement('div');
+  bar.id = 'lineup-template-bar';
+  bar.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap';
+  bar.innerHTML = `
+    <button class="btn btn-sm" onclick="saveLineupTemplate('${evId}')">💾 Save as template</button>
+    <button class="btn btn-sm btn-ghost" onclick="loadLineupTemplate('${evId}')">📋 Load template</button>`;
+  const body = document.getElementById('ev-detail-body');
+  if (body) body.prepend(bar);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRACTICE DEBRIEF NOTES
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderDebriefSection(evId) {
+  if (!can.edit()) return;
+  db.ref('debriefs/'+evId).get().then(snap=>{
+    const notes = Object.entries(snap.val()||{}).sort((a,b)=>b[1].ts-a[1].ts);
+    const existing = document.getElementById('debrief-section');
+    const section = existing || document.createElement('div');
+    section.id = 'debrief-section';
+    section.innerHTML = `<div class="dash-section-title" style="margin-top:16px">📝 Debrief notes</div>
+      ${notes.map(([key,n])=>`<div class="debrief-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:12px;font-weight:700;color:var(--accent-text)">${esc(n.authorName||'Coach')}</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span style="font-size:11px;color:var(--text-3)">${new Date(n.ts).toLocaleDateString('en-CA',{month:'short',day:'numeric'})}</span>
+            <button class="btn btn-sm btn-ghost" style="font-size:10px;padding:2px 6px;color:var(--danger-text)" onclick="deleteDebrief('${evId}','${key}')">✕</button>
+          </div>
+        </div>
+        <div style="font-size:14px;white-space:pre-wrap">${esc(n.text)}</div>
+      </div>`).join('')}
+      <textarea id="debrief-input" style="min-height:70px;resize:vertical;font-size:14px;margin-top:8px" placeholder="Add debrief note (timing, technique, highlights)…"></textarea>
+      <button class="btn btn-sm btn-primary" style="margin-top:6px" onclick="addDebrief('${evId}')">Add note</button>`;
+    if (!existing) {
+      const body = document.getElementById('ev-detail-body');
+      if (body) body.appendChild(section);
+    }
+  });
+}
+
+window.addDebrief = async function(evId) {
+  const text = document.getElementById('debrief-input')?.value?.trim();
+  if (!text) { showToast('Note is empty','⚠️'); return; }
+  const key = db.ref('debriefs/'+evId).push().key;
+  await db.ref('debriefs/'+evId+'/'+key).set({ text, ts:Date.now(), authorName:currentProfile.name, authorUid:currentUser.uid });
+  showToast('Debrief added ✓');
+  renderDebriefSection(evId);
+};
+window.deleteDebrief = async function(evId, key) {
+  await db.ref('debriefs/'+evId+'/'+key).remove();
+  showToast('Deleted','🗑');
+  renderDebriefSection(evId);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WEIGHT DISTRIBUTION VISUALIZER (in lineup tab)
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderWeightChart(lineup, members) {
+  const ROWS = 10;
+  const rows = [];
+  for (let r=1;r<=ROWS;r++) {
+    const lUid=lineup[`row${r}_left`], rUid=lineup[`row${r}_right`];
+    const lM=members.find(m=>m.uid===lUid), rM=members.find(m=>m.uid===rUid);
+    const lW=Number(lM?.weight||0), rW=Number(rM?.weight||0);
+    rows.push({ r, lW, rW, total:lW+rW });
+  }
+  const maxW = Math.max(...rows.map(x=>x.total), 1);
+  return `<div style="margin-top:12px">
+    <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Weight distribution by row</div>
+    ${rows.filter(x=>x.total>0).map(x=>`<div style="display:grid;grid-template-columns:28px 1fr 28px;gap:4px;align-items:center;margin-bottom:4px">
+      <div style="font-size:11px;color:var(--text-3);text-align:right">${x.lW||'—'}</div>
+      <div>
+        <div style="display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--surface-alt)">
+          <div style="width:${x.lW?Math.round(x.lW/maxW*100):0}%;background:var(--accent);border-radius:5px 0 0 5px"></div>
+          <div style="flex:1"></div>
+          <div style="width:${x.rW?Math.round(x.rW/maxW*100):0}%;background:var(--success);border-radius:0 5px 5px 0"></div>
+        </div>
+        <div style="text-align:center;font-size:10px;color:var(--text-3);margin-top:1px">Row ${x.r} · ${x.total} lbs</div>
+      </div>
+      <div style="font-size:11px;color:var(--text-3)">${x.rW||'—'}</div>
+    </div>`).join('')}
+    ${rows.filter(x=>x.total>0).length===0?'<div style="color:var(--text-3);font-size:13px">Add members with weights to see distribution.</div>':''}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// RSVP TRENDS
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderRsvpTrends(practices, members) {
+  if (practices.length < 2) return '';
+  const data = practices.map(ev=>{
+    const yes=members.filter(m=>(ev.rsvps||{})[m.uid]==='yes').length;
+    const no=members.filter(m=>(ev.rsvps||{})[m.uid]==='no').length;
+    const nr=members.length-yes-no;
+    return { date:ev.date, yes, no, nr, pct:members.length?Math.round(yes/members.length*100):0 };
+  });
+  const maxPct=100;
+  const w=Math.max(20,Math.min(40,Math.floor(480/data.length)));
+  const h=120;
+  const bars=data.map((d,i)=>{
+    const barH=Math.round(d.pct/100*h);
+    const col=d.pct>=80?'var(--success)':d.pct>=50?'var(--warning)':'var(--danger)';
+    return `<div style="display:flex;flex-direction:column;align-items:center;width:${w}px;flex-shrink:0">
+      <div style="font-size:10px;font-weight:700;color:var(--text-2)">${d.pct}%</div>
+      <div style="width:${w-6}px;height:${h}px;display:flex;align-items:flex-end">
+        <div style="width:100%;height:${barH}px;background:${col};border-radius:4px 4px 0 0;min-height:2px" title="${fmtDateS(d.date)}: ${d.yes}/${members.length}"></div>
+      </div>
+      <div style="font-size:9px;color:var(--text-3);text-align:center;margin-top:2px;width:${w}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtDateS(d.date)}</div>
+    </div>`;
+  }).join('');
+  const avg=Math.round(data.reduce((a,d)=>a+d.pct,0)/data.length);
+  return `<div class="card" style="padding:16px;margin-bottom:16px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px">📈 RSVP trend — avg ${avg}%</div>
+    <div style="overflow-x:auto;padding-bottom:4px">
+      <div style="display:flex;gap:2px;align-items:flex-end;min-width:max-content">${bars}</div>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PUSH NOTIFICATIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+async function requestPushPermission() {
+  if (!('Notification' in window)) { showToast('Push notifications not supported on this device','⚠️'); return false; }
+  if (Notification.permission === 'granted') return true;
+  if (Notification.permission === 'denied') { showToast('Notifications blocked — enable in browser settings','⚠️'); return false; }
+  const result = await Notification.requestPermission();
+  if (result === 'granted') {
+    await db.ref('users/'+currentUser.uid+'/pushEnabled').set(true);
+    showToast('Push notifications enabled! 🔔');
+    return true;
+  }
+  return false;
+}
+
+async function sendPushReminder(ev, members) {
+  // Send Web Push to members who haven't RSVPed and have pushEnabled
+  const uSnap = await db.ref('users').get();
+  const targets = Object.values(uSnap.val()||{})
+    .filter(m => m.approved && m.pushEnabled && !(ev.rsvps||{})[m.uid]);
+  // We use BroadcastChannel to notify other tabs; for cross-device push a service worker + push server is needed
+  if ('BroadcastChannel' in window) {
+    const bc = new BroadcastChannel('otter-push');
+    bc.postMessage({ type:'reminder', evName:ev.name, evDate:fmtDate(ev.date) });
+    bc.close();
+  }
+  // Also trigger a local notification if permission granted
+  if (Notification.permission === 'granted') {
+    targets.forEach(m => {
+      if (m.uid === currentUser.uid) {
+        new Notification('🚣 Practice reminder', { body: ev.name+' · '+fmtDate(ev.date), icon:'/favicon.ico' });
+      }
+    });
+  }
+  return targets.length;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DIRECT MESSAGING
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgMessaging() {
+  const C = document.getElementById('pg-content');
+  const uid = currentUser.uid;
+  localStorage.setItem('msg-last-seen-'+uid, Date.now());
+  const badge = document.getElementById('msg-badge');
+  if (badge) { badge.textContent='0'; badge.style.display='none'; }
+
+  if (can.edit()) {
+    const A = document.getElementById('pg-actions');
+    const b = document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='✉️ New message'; b.onclick=openNewMessageModal; A.appendChild(b);
+  }
+
+  // Load all messages involving current user
+  Promise.all([
+    db.ref('messages').orderByChild('toUid').equalTo(uid).get(),
+    db.ref('messages').orderByChild('fromUid').equalTo(uid).get(),
+    db.ref('users').get(),
+  ]).then(([toSnap, fromSnap, uSnap]) => {
+    const users = uSnap.val()||{};
+    const all = {
+      ...toSnap.val()||{},
+      ...fromSnap.val()||{},
+    };
+    const msgs = Object.entries(all).sort((a,b)=>b[1].ts-a[1].ts);
+    if (!msgs.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">💬</div><div class="empty-title">No messages yet</div><div class="empty-sub">${can.edit()?'Send a message to a team member.':'Coaches and admins can send you messages here.'}</div></div></div>`; return; }
+
+    // Group by conversation partner
+    const convos = {};
+    msgs.forEach(([key,m]) => {
+      const partner = m.fromUid===uid ? m.toUid : m.fromUid;
+      if (!convos[partner]) convos[partner]=[];
+      convos[partner].push({...m, key});
+    });
+
+    C.innerHTML = Object.entries(convos).map(([partnerUid, thread])=>{
+      const partner = users[partnerUid]||{};
+      const latest = thread[0];
+      const unread = thread.filter(m=>m.toUid===uid&&!m.read).length;
+      return `<div class="card" style="padding:14px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:12px" onclick="openConversation('${partnerUid}')">
+        <div class="avatar" style="flex-shrink:0">${initials(partner.name||'?')}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;font-size:14px">${esc(partner.name||partnerUid)}</div>
+          <div style="font-size:13px;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(latest.text||'')}</div>
+        </div>
+        <div style="flex-shrink:0;text-align:right">
+          <div style="font-size:11px;color:var(--text-3)">${new Date(latest.ts).toLocaleDateString('en-CA',{month:'short',day:'numeric'})}</div>
+          ${unread?`<span class="nav-badge" style="display:inline-flex;margin-top:4px">${unread}</span>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  });
+}
+
+window.openConversation = function(partnerUid) {
+  closeModal();
+  Promise.all([
+    db.ref('messages').orderByChild('toUid').equalTo(currentUser.uid).get(),
+    db.ref('messages').orderByChild('fromUid').equalTo(currentUser.uid).get(),
+    db.ref('users/'+partnerUid).get(),
+  ]).then(([toSnap, fromSnap, pSnap])=>{
+    const partner = pSnap.val()||{};
+    const uid = currentUser.uid;
+    const all = {...toSnap.val()||{}, ...fromSnap.val()||{}};
+    const thread = Object.entries(all)
+      .filter(([,m])=>(m.fromUid===uid&&m.toUid===partnerUid)||(m.fromUid===partnerUid&&m.toUid===uid))
+      .sort((a,b)=>a[1].ts-b[1].ts);
+    // Mark as read
+    thread.filter(([,m])=>m.toUid===uid&&!m.read).forEach(([key])=>db.ref('messages/'+key+'/read').set(true));
+
+    const overlay = document.createElement('div'); overlay.className='overlay';
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+    overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+      <div class="modal-header" style="flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="avatar">${initials(partner.name||'?')}</div>
+          <div><div class="modal-title">${esc(partner.name||partnerUid)}</div><div class="modal-sub">${roleBadge(partner.role)}</div></div>
+        </div>
+        <button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:2px" id="msg-thread">
+        ${thread.map(([,m])=>`<div>
+          <div class="msg-bubble ${m.fromUid===uid?'sent':'recv'}">${esc(m.text)}</div>
+          <div class="msg-time" style="text-align:${m.fromUid===uid?'right':'left'}">${new Date(m.ts).toLocaleTimeString('en-CA',{hour:'numeric',minute:'2-digit'})}</div>
+        </div>`).join('')}
+        ${!thread.length?'<div style="text-align:center;color:var(--text-3);font-size:13px;padding:20px">Start a conversation</div>':''}
+      </div>
+      <div class="modal-footer" style="flex-shrink:0;gap:8px">
+        <input id="msg-reply-input" style="flex:1" placeholder="Type a message…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage('${partnerUid}');}">
+        <button class="btn btn-primary" onclick="sendMessage('${partnerUid}')">Send</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay); modalEl=overlay;
+    setTimeout(()=>{ const t=document.getElementById('msg-thread'); if(t)t.scrollTop=t.scrollHeight; document.getElementById('msg-reply-input')?.focus(); },100);
+  });
+};
+
+window.sendMessage = async function(toUid) {
+  const input = document.getElementById('msg-reply-input');
+  const text = input?.value?.trim(); if(!text) return;
+  input.value='';
+  const key = db.ref('messages').push().key;
+  await db.ref('messages/'+key).set({
+    fromUid: currentUser.uid,
+    toUid,
+    text,
+    ts: Date.now(),
+    read: false,
+    fromName: currentProfile.name,
+  });
+  // Re-open conversation to refresh
+  closeModal();
+  openConversation(toUid);
+};
+
+function openNewMessageModal() {
+  closeModal();
+  db.ref('users').get().then(snap=>{
+    const members = Object.values(snap.val()||{}).filter(u=>u.approved&&u.uid!==currentUser.uid).sort((a,b)=>a.name.localeCompare(b.name));
+    const overlay=document.createElement('div'); overlay.className='overlay';
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
+    overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
+      <div class="modal-header" style="flex-shrink:0"><div class="modal-title">✉️ New message</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
+      <div class="modal-body" style="overflow-y:auto;flex:1">
+        <div class="form-group"><label class="form-label">To</label>
+          <select id="msg-to-uid">
+            <option value="">Select member…</option>
+            ${members.map(m=>`<option value="${m.uid}">${esc(m.name)} (${m.role})</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Message</label><textarea id="msg-new-text" style="min-height:100px;resize:vertical" placeholder="Type your message…"></textarea></div>
+      </div>
+      <div class="modal-footer" style="flex-shrink:0">
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="sendNewMessage()">Send</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay); modalEl=overlay;
+  });
+}
+
+window.sendNewMessage = async function() {
+  const toUid = document.getElementById('msg-to-uid')?.value;
+  const text = document.getElementById('msg-new-text')?.value?.trim();
+  if (!toUid||!text) { showToast('Please select a recipient and type a message','⚠️'); return; }
+  const key = db.ref('messages').push().key;
+  await db.ref('messages/'+key).set({ fromUid:currentUser.uid, toUid, text, ts:Date.now(), read:false, fromName:currentProfile.name });
+  closeModal(); showToast('Message sent ✓','💬');
+  navigate('messaging');
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PERSONAL SEASON GOALS
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderGoalsSection(p, allEvs) {
+  const past = allEvs.filter(e=>e.date<today());
+  const pastPrac = past.filter(e=>e.type==='Practice');
+  const pastRace = past.filter(e=>e.type==='Race');
+  const attPrac = pastPrac.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
+  const attRace = pastRace.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
+  const goals = p.goals||{};
+
+  function goalRow(label, current, total, goalKey, unit='%') {
+    const goalVal = Number(goals[goalKey]||0);
+    const progress = goalVal > 0 ? Math.min(100, Math.round(current/goalVal*100)) : null;
+    const pct = total > 0 ? Math.round(current/total*100) : 0;
+    return `<div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div style="font-size:13px;font-weight:600">${label}</div>
+        <div style="font-size:12px;color:var(--text-3)">${current} / ${goalVal||'—'} ${unit==='%'?'('+pct+'%)':unit}</div>
+      </div>
+      ${progress!==null?`<div class="goal-bar-wrap"><div class="goal-bar" style="width:${progress}%;background:${progress>=100?'var(--success)':progress>=50?'var(--warning)':'var(--accent)'}"></div></div>`:'<div style="font-size:12px;color:var(--text-3)">No goal set</div>'}
+      ${can.edit()||p.uid===currentUser.uid?`<div style="margin-top:4px;display:flex;align-items:center;gap:6px">
+        <input type="number" min="0" value="${goalVal||''}" placeholder="Set goal" style="max-width:90px;font-size:13px;padding:4px 8px" id="goal-${goalKey}">
+        <button class="btn btn-sm btn-ghost" onclick="saveGoal('${p.uid}','${goalKey}',document.getElementById('goal-${goalKey}').value)">Save</button>
+      </div>`:''}
+    </div>`;
+  }
+
+  return `<div class="dash-section-title">🎯 Season goals</div>
+  <div class="card" style="padding:16px;margin-bottom:16px">
+    ${goalRow('Practice attendance', attPrac, pastPrac.length, 'practiceTarget', 'practices')}
+    ${goalRow('Races competed', attRace, pastRace.length, 'raceTarget', 'races')}
+  </div>`;
+}
+
+window.saveGoal = async function(uid, key, val) {
+  if (!val) { await db.ref('users/'+uid+'/goals/'+key).remove(); }
+  else { await db.ref('users/'+uid+'/goals/'+key).set(Number(val)); }
+  showToast('Goal saved ✓');
+  pgProfile();
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GUEST / VISITOR RSVP
+// ═══════════════════════════════════════════════════════════════════════════════
+window.addGuestRsvp = async function(evId) {
+  const name = prompt('Guest name:'); if (!name) return;
+  const key = db.ref('events/'+evId+'/guests').push().key;
+  await db.ref('events/'+evId+'/guests/'+key).set({ name:name.trim(), addedBy:currentUser.uid, ts:Date.now() });
+  showToast(name+' added as guest ✓','🤝');
+  if (window._evPage) {
+    const snap = await db.ref('events/'+evId).get();
+    window._evPage.ev = snap.val();
+    renderEvDetailRsvp(evId, window._evPage.ev, window._evPage.members, window._evPage.lineup, currentUser.uid);
+  }
+};
+window.removeGuest = async function(evId, key) {
+  await db.ref('events/'+evId+'/guests/'+key).remove();
+  if (window._evPage) {
+    const snap = await db.ref('events/'+evId).get();
+    window._evPage.ev = snap.val();
+    renderEvDetailRsvp(evId, window._evPage.ev, window._evPage.members, window._evPage.lineup, currentUser.uid);
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHANGE LOG
+// ═══════════════════════════════════════════════════════════════════════════════
+async function logChange(action) {
+  if (!currentUser) return;
+  const key = db.ref('changelog').push().key;
+  await db.ref('changelog/'+key).set({ action, ts:Date.now(), uid:currentUser.uid, name:currentProfile?.name||'Unknown' });
+}
+
+function pgChangeLog() {
+  if (!can.admin()) { navigate('dashboard'); return; }
+  const C = document.getElementById('pg-content');
+  db.ref('changelog').orderByChild('ts').limitToLast(100).get().then(snap=>{
+    const items = Object.entries(snap.val()||{}).sort((a,b)=>b[1].ts-a[1].ts);
+    if (!items.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">📜</div><div class="empty-title">No actions logged yet</div></div></div>`; return; }
+    C.innerHTML=`<div style="font-size:13px;color:var(--text-3);margin-bottom:12px">Last 100 actions</div>
+      <div class="card" style="padding:0;overflow:hidden">
+        ${items.map(([,l])=>`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">
+          <div class="avatar" style="flex-shrink:0;width:30px;height:30px;font-size:10px">${initials(l.name||'?')}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;font-weight:600">${esc(l.name||'Unknown')}</div>
+            <div style="font-size:13px;color:var(--text-2)">${esc(l.action)}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-3);flex-shrink:0">${new Date(l.ts).toLocaleDateString('en-CA',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</div>
+        </div>`).join('')}
+      </div>`;
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BULK EVENT CREATION
+// ═══════════════════════════════════════════════════════════════════════════════
+function pgBulkEvent() {
+  if (!can.edit()) { navigate('dashboard'); return; }
+  const C = document.getElementById('pg-content');
+  C.innerHTML = `<div class="card" style="padding:24px;max-width:560px">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px">Create multiple events at once</div>
+    <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">Enter one date per line. All events will use the same name, time, location and type.</div>
+    <div class="form-group"><label class="form-label">Event name *</label><input id="be-name" placeholder="Wednesday Practice"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group"><label class="form-label">Type</label>
+        <select id="be-type">
+          <option>Practice</option>
+          <option>Race</option>
+          <option value="Otter S.O.C.I.A.L">Otter S.O.C.I.A.L</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Time</label><input id="be-time" type="time"></div>
+    </div>
+    <div class="form-group"><label class="form-label">Location</label><input id="be-loc" placeholder="Rocky Point Pier"></div>
+    <div class="form-group">
+      <label class="form-label">Dates (one per line) *</label>
+      <textarea id="be-dates" style="min-height:140px;resize:vertical;font-family:monospace;font-size:13px" placeholder="2026-07-02&#10;2026-07-09&#10;2026-07-16&#10;2026-07-23"></textarea>
+      <div style="font-size:12px;color:var(--text-3);margin-top:4px">Format: YYYY-MM-DD — you can paste a whole season schedule at once</div>
+    </div>
+    <div id="be-preview" style="margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-ghost" onclick="previewBulkEvents()">Preview</button>
+      <button class="btn btn-primary" onclick="createBulkEvents()">Create all</button>
+    </div>
+  </div>`;
+}
+
+window.previewBulkEvents = function() {
+  const dates = (document.getElementById('be-dates')?.value||'').split('\n').map(d=>d.trim()).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d));
+  const preview = document.getElementById('be-preview');
+  if (!preview) return;
+  if (!dates.length) { preview.innerHTML='<div style="color:var(--danger-text);font-size:13px">No valid dates found. Format: YYYY-MM-DD</div>'; return; }
+  preview.innerHTML=`<div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:13px">
+    <div style="font-weight:700;margin-bottom:6px">Will create ${dates.length} event${dates.length!==1?'s':''}:</div>
+    ${dates.slice(0,8).map(d=>`<div style="color:var(--text-2)">• ${fmtDate(d)}</div>`).join('')}
+    ${dates.length>8?`<div style="color:var(--text-3)">…and ${dates.length-8} more</div>`:''}
+  </div>`;
+};
+
+window.createBulkEvents = async function() {
+  const name = document.getElementById('be-name')?.value?.trim();
+  const type = document.getElementById('be-type')?.value;
+  const time = document.getElementById('be-time')?.value;
+  const location = document.getElementById('be-loc')?.value?.trim();
+  const dates = (document.getElementById('be-dates')?.value||'').split('\n').map(d=>d.trim()).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d));
+  if (!name) { showToast('Event name required','⚠️'); return; }
+  if (!dates.length) { showToast('No valid dates','⚠️'); return; }
+  const btn = document.querySelector('[onclick="createBulkEvents()"]');
+  if (btn) { btn.disabled=true; btn.textContent='Creating…'; }
+  for (const date of dates) {
+    const id = genUid('e');
+    await db.ref('events/'+id).set({ id, name, type, date, time:time||'', location:location||'', recurring:'none', recurUntil:'', exclusive:false, invitees:{}, rsvps:{} });
+  }
+  if (btn) { btn.disabled=false; btn.textContent='Create all'; }
+  showToast(`Created ${dates.length} events ✓`,'📆');
+  logChange(`Created ${dates.length} bulk events (${name})`);
+  navigate('practices');
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WIRE UP LINEUP TAB — add template buttons, weight chart, debrief
+// ═══════════════════════════════════════════════════════════════════════════════
+const _origRenderLineup = renderEvDetailLineup;
+renderEvDetailLineup = function(evId, ev, members, lineup) {
+  _origRenderLineup(evId, ev, members, lineup);
+  // Add template buttons
+  if (can.edit()) addLineupTemplateButtons(evId);
+  // Add weight chart
+  const body = document.getElementById('ev-detail-body');
+  if (body && (ev.type==='Practice'||ev.type==='Race')) {
+    const wDiv = document.createElement('div');
+    wDiv.innerHTML = renderWeightChart(lineup, members);
+    body.appendChild(wDiv);
+    // Add debrief section for past practices
+    if (ev.date < today()) renderDebriefSection(evId);
+  }
+};
+
+// Wire up guest RSVPs in RSVP tab
+const _origRenderRsvp = renderEvDetailRsvp;
+renderEvDetailRsvp = function(evId, ev, members, lineup, uid) {
+  _origRenderRsvp(evId, ev, members, lineup, uid);
+  // Add guest section
+  const body = document.getElementById('ev-detail-body');
+  if (!body) return;
+  const guests = Object.entries(ev.guests||{});
+  const gSection = document.createElement('div');
+  gSection.style.marginTop='16px';
+  gSection.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+    Guests / Visitors ${guests.length?'('+guests.length+')':''}
+  </div>
+  <div>
+    ${guests.map(([key,g])=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:6px"><div class="avatar" style="width:24px;height:24px;font-size:9px">${initials(g.name)}</div><span style="font-size:13px">${esc(g.name)}</span><span class="badge" style="background:var(--warning-bg);color:var(--warning-text);font-size:10px">Guest</span></div>
+      ${can.edit()?`<button class="btn btn-sm btn-ghost" style="color:var(--danger-text)" onclick="removeGuest('${evId}','${key}')">✕</button>`:''}
+    </div>`).join('')}
+    ${can.edit()?`<button class="btn btn-sm btn-ghost" style="margin-top:8px" onclick="addGuestRsvp('${evId}')">＋ Add guest</button>`:''}
+  </div>`;
+  body.appendChild(gSection);
+};
+
+// Wire up push notifications prompt in settings
+const _origPgSettings = pgSettings;
+pgSettings = function() {
+  _origPgSettings();
+  setTimeout(()=>{
+    const C = document.getElementById('pg-content'); if(!C) return;
+    const pushOn = Notification.permission==='granted';
+    const pushSection=document.createElement('div');
+    pushSection.className='card'; pushSection.style.cssText='padding:20px;max-width:520px;margin-bottom:16px;margin-top:16px';
+    pushSection.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <span style="font-size:16px;font-weight:700">🔔 Push notifications</span>
+      <span class="${pushOn?'rsvp-status-pill yes':'rsvp-status-pill no'}">${pushOn?'✓ Enabled':'✗ Off'}</span>
+    </div>
+    <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">Get browser notifications for upcoming practices, announcements and messages — even when the tab is in the background.</p>
+    ${!pushOn?`<button class="btn btn-primary" onclick="requestPushPermission()">Enable notifications</button>`:`<p style="font-size:13px;color:var(--success-text)">✓ Notifications are enabled. You'll be notified on this device.</p>`}`;
+    C.appendChild(pushSection);
+  }, 300);
+};
+
+// Wire up goals section to profile
+const _origPgProfile = pgProfile;
+pgProfile = function() {
+  const _origInner = renderEvDetailRsvp; // save
+  _origPgProfile();
+  // Goals and push notif are injected after profile renders
+  setTimeout(()=>{
+    const uid = currentUser?.uid;
+    if (!uid) return;
+    // Goals
+    Promise.all([db.ref('events').get(), db.ref('users/'+uid).get()]).then(([evSnap, uSnap])=>{
+      const p2 = uSnap.val(); if (!p2) return;
+      const allEvs = Object.values(evSnap.val()||{});
+      const goalHtml = renderGoalsSection(p2, allEvs);
+      const editTitle = document.querySelector('#pg-content .dash-section-title:last-of-type');
+      if (editTitle) {
+        const goalDiv = document.createElement('div');
+        goalDiv.innerHTML = goalHtml;
+        editTitle.before(goalDiv);
+      }
+    }).catch(()=>{});
+    // Push notification opt-in
+    if ('Notification' in window && Notification.permission==='default') {
+      const C = document.getElementById('pg-content'); if(!C) return;
+      const banner = document.createElement('div'); banner.className='push-banner';
+      banner.innerHTML=`<span style="font-size:18px">🔔</span><div style="flex:1"><strong>Enable practice reminders</strong><div style="font-size:12px;margin-top:2px">Get browser notifications so you never miss a practice.</div></div><button class="btn btn-sm btn-primary" onclick="requestPushPermission().then(()=>pgProfile())">Enable</button>`;
+      C.prepend(banner);
+    }
+  }, 500);
+};
+
+// Wire RSVP trend chart into Season Summary
+const _origPgSeason = pgSeasonSummary;
+pgSeasonSummary = function() {
+  _origPgSeason();
+  setTimeout(()=>{
+    const C = document.getElementById('pg-content'); if(!C) return;
+    db.ref('users').get().then(uSnap=>{
+      db.ref('events').get().then(evSnap=>{
+        const members = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+        const practices = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today()).sort((a,b)=>a.date.localeCompare(b.date));
+        const trendHtml = renderRsvpTrends(practices, members);
+        if (trendHtml) {
+          const area = document.getElementById('season-export-area'); if(!area) return;
+          const div = document.createElement('div'); div.innerHTML=trendHtml; area.prepend(div);
+        }
+      });
+    });
+  }, 400);
+};
+
+// Wrap key mutations with logChange
+const _origSaveEvt = window.saveEvt;
+if (_origSaveEvt) {
+  window.saveEvt = async function(id, isNew) {
+    await _origSaveEvt(id, isNew);
+    const name = document.getElementById('ef-name')?.value?.trim();
+    logChange((isNew?'Created':'Edited')+' event: '+(name||id));
+  };
+}
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
 initApp();
