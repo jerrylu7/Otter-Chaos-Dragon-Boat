@@ -27,7 +27,7 @@ const FIREBASE_CONFIG = {
   measurementId: "G-92YNJ5QNL5"
 };
 const TEAM_NAME_DEFAULT = "Otter Chaos Dragon Boat";
-const APP_URL = "https://jerrylu7.github.io/Otter-Chaos-Dragon-Boat";
+const APP_URL = "https://jerrylu7.github.io/Otter-Chaos-Dragon-Boat/";
 
 // EmailJS — free auto-email service. Sign up at emailjs.com, create a service
 // and template, then paste your IDs here to enable automatic reminders.
@@ -1195,12 +1195,13 @@ function buildSidebar() {
     const unread = Object.values(snap.val()||{}).filter(a=>a.ts>lastSeen).length;
     badge.textContent = unread; badge.style.display = unread ? 'inline-flex' : 'none';
   });
-  // Messages unread badge
-  db.ref('messages').orderByChild('toUid').equalTo(currentUser.uid).on('value', snap => {
+  // Messages unread badge — simple full fetch, filter client-side
+  db.ref('messages').on('value', snap => {
     const badge = document.getElementById('msg-badge');
     if (!badge) return;
-    const lastSeen = Number(localStorage.getItem('msg-last-seen-'+currentUser.uid)||0);
-    const unread = Object.values(snap.val()||{}).filter(m=>m.ts>lastSeen).length;
+    const uid = currentUser.uid;
+    const lastSeen = Number(localStorage.getItem('msg-last-seen-'+uid)||0);
+    const unread = Object.values(snap.val()||{}).filter(m=>m.toUid===uid&&m.ts>lastSeen).length;
     badge.textContent = unread; badge.style.display = unread ? 'inline-flex' : 'none';
   });
   if (can.admin()) {
@@ -4684,6 +4685,7 @@ async function sendPushReminder(ev, members) {
 function pgMessaging() {
   const C = document.getElementById('pg-content');
   const uid = currentUser.uid;
+  C.innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading messages…</div>';
   localStorage.setItem('msg-last-seen-'+uid, Date.now());
   const badge = document.getElementById('msg-badge');
   if (badge) { badge.textContent='0'; badge.style.display='none'; }
@@ -4693,31 +4695,40 @@ function pgMessaging() {
     const b = document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='✉️ New message'; b.onclick=openNewMessageModal; A.appendChild(b);
   }
 
-  // Load all messages involving current user
+  // Single fetch of all messages, filter client-side (avoids needing Firebase indexes)
   Promise.all([
-    db.ref('messages').orderByChild('toUid').equalTo(uid).get(),
-    db.ref('messages').orderByChild('fromUid').equalTo(uid).get(),
+    db.ref('messages').get(),
     db.ref('users').get(),
-  ]).then(([toSnap, fromSnap, uSnap]) => {
+  ]).then(([msgSnap, uSnap]) => {
     const users = uSnap.val()||{};
-    const all = {
-      ...toSnap.val()||{},
-      ...fromSnap.val()||{},
-    };
-    const msgs = Object.entries(all).sort((a,b)=>b[1].ts-a[1].ts);
-    if (!msgs.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">💬</div><div class="empty-title">No messages yet</div><div class="empty-sub">${can.edit()?'Send a message to a team member.':'Coaches and admins can send you messages here.'}</div></div></div>`; return; }
+    const allMsgs = msgSnap.val()||{};
+
+    // Filter to messages involving current user
+    const mine = Object.entries(allMsgs).filter(([,m])=>m.fromUid===uid||m.toUid===uid);
+
+    if (!mine.length) {
+      C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">💬</div><div class="empty-title">No messages yet</div><div class="empty-sub">${can.edit()?'Use the button above to send a message to a team member.':'Coaches and admins can send you messages here.'}</div></div></div>`;
+      return;
+    }
 
     // Group by conversation partner
     const convos = {};
-    msgs.forEach(([key,m]) => {
+    mine.forEach(([key,m]) => {
       const partner = m.fromUid===uid ? m.toUid : m.fromUid;
       if (!convos[partner]) convos[partner]=[];
       convos[partner].push({...m, key});
     });
 
-    C.innerHTML = Object.entries(convos).map(([partnerUid, thread])=>{
+    // Sort each thread by time, show convos by most recent
+    const convoList = Object.entries(convos)
+      .map(([partnerUid, thread]) => {
+        thread.sort((a,b)=>b.ts-a.ts);
+        return { partnerUid, thread, latest:thread[0] };
+      })
+      .sort((a,b)=>b.latest.ts-a.latest.ts);
+
+    C.innerHTML = convoList.map(({partnerUid, thread, latest})=>{
       const partner = users[partnerUid]||{};
-      const latest = thread[0];
       const unread = thread.filter(m=>m.toUid===uid&&!m.read).length;
       return `<div class="card" style="padding:14px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:12px" onclick="openConversation('${partnerUid}')">
         <div class="avatar" style="flex-shrink:0">${initials(partner.name||'?')}</div>
@@ -4731,23 +4742,27 @@ function pgMessaging() {
         </div>
       </div>`;
     }).join('');
+  }).catch(()=>{
+    C.innerHTML=`<div class="card" style="padding:24px;text-align:center"><div style="font-size:28px;margin-bottom:10px">💬</div><div style="font-weight:700;margin-bottom:6px">Could not load messages</div><div style="font-size:13px;color:var(--text-3);margin-bottom:16px">Check your connection and try again.</div><button class="btn btn-primary" onclick="pgMessaging()">Retry</button></div>`;
   });
 }
 
 window.openConversation = function(partnerUid) {
   closeModal();
   Promise.all([
-    db.ref('messages').orderByChild('toUid').equalTo(currentUser.uid).get(),
-    db.ref('messages').orderByChild('fromUid').equalTo(currentUser.uid).get(),
+    db.ref('messages').get(),
     db.ref('users/'+partnerUid).get(),
-  ]).then(([toSnap, fromSnap, pSnap])=>{
+  ]).then(([msgSnap, pSnap])=>{
     const partner = pSnap.val()||{};
     const uid = currentUser.uid;
-    const all = {...toSnap.val()||{}, ...fromSnap.val()||{}};
-    const thread = Object.entries(all)
+    const allMsgs = msgSnap.val()||{};
+
+    // Filter to this conversation
+    const thread = Object.entries(allMsgs)
       .filter(([,m])=>(m.fromUid===uid&&m.toUid===partnerUid)||(m.fromUid===partnerUid&&m.toUid===uid))
       .sort((a,b)=>a[1].ts-b[1].ts);
-    // Mark as read
+
+    // Mark received messages as read
     thread.filter(([,m])=>m.toUid===uid&&!m.read).forEach(([key])=>db.ref('messages/'+key+'/read').set(true));
 
     const overlay = document.createElement('div'); overlay.className='overlay';
