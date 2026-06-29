@@ -4333,26 +4333,40 @@ function pgSeasonSummary() {
 }
 
 function exportSeasonPDF() {
-  const area=document.getElementById('season-export-area');
-  if(!area){showToast('Nothing to export','⚠️');return;}
-  const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Season Summary</title>
-    <style>
-      body{font-family:system-ui,sans-serif;padding:24px;color:#111}
-      .metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
-      .metric{border:1px solid #ddd;border-radius:8px;padding:14px;text-align:center}
-      .metric-value{font-size:24px;font-weight:800}
-      .metric-label{font-size:11px;color:#666;text-transform:uppercase}
-      .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-      .mcard{border:1px solid #ddd;border-radius:8px;padding:14px;break-inside:avoid}
-      h2{font-size:14px;font-weight:700;margin:16px 0 8px;text-transform:uppercase;letter-spacing:.05em;color:#666}
-      @media print{body{padding:0}}
-    </style></head><body>
-    <h1 style="font-size:22px;font-weight:800;margin-bottom:4px">Season Summary — Otter Chaos Dragon Boat</h1>
-    <p style="color:#666;font-size:13px;margin-bottom:20px">Generated ${new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'})}</p>
-    ${area.innerHTML}
-    <scr'+'ipt>window.print();<'+'script></body></html>`);
+  const area = document.getElementById('season-export-area');
+  if (!area) { showToast('Nothing to export','⚠️'); return; }
+  const w = window.open('','_blank');
+  if (!w) { showToast('Allow pop-ups to export PDF','⚠️'); return; }
+
+  // Build HTML using array join to avoid raw closing tags inside this script
+  const parts = [
+    '<!DOCTYPE html>',
+    '<html><head>',
+    '<meta charset="UTF-8">',
+    '<title>Season Summary<\/title>',
+    '<style>',
+    'body{font-family:system-ui,sans-serif;padding:24px;color:#111}',
+    '.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}',
+    '.metric{border:1px solid #ddd;border-radius:8px;padding:14px;text-align:center}',
+    '.metric-value{font-size:24px;font-weight:800}',
+    '.metric-label{font-size:11px;color:#666;text-transform:uppercase}',
+    '.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}',
+    '.mcard{border:1px solid #ddd;border-radius:8px;padding:14px;break-inside:avoid}',
+    'h2{font-size:14px;font-weight:700;margin:16px 0 8px;text-transform:uppercase;letter-spacing:.05em;color:#666}',
+    '@media print{body{padding:0}}',
+    '<\/style>',
+    '<\/head>',
+    '<body>',
+    '<h1 style="font-size:22px;font-weight:800;margin-bottom:4px">Season Summary \u2014 ' + (document.getElementById('sb-team-name')?.textContent || 'Otter Chaos Dragon Boat') + '<\/h1>',
+    '<p style="color:#666;font-size:13px;margin-bottom:20px">Generated ' + new Date().toLocaleDateString('en-CA',{year:'numeric',month:'long',day:'numeric'}) + '<\/p>',
+    area.innerHTML,
+    '<\/body>',
+    '<\/html>',
+  ];
+
+  w.document.write(parts.join(''));
   w.document.close();
+  setTimeout(() => w.print(), 500);
 }
 
 // Also show announcements banner on dashboard
