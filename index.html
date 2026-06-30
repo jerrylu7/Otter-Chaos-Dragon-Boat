@@ -51,14 +51,13 @@
      ============================================================ -->
 <script>
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyBLKA68lRaaqjPtik8h3jwmgIYCtPKL40Y",
-  authDomain: "otter-chaos-dragon-boat.firebaseapp.com",
-  databaseURL: "https://otter-chaos-dragon-boat-default-rtdb.firebaseio.com",
-  projectId: "otter-chaos-dragon-boat",
-  storageBucket: "otter-chaos-dragon-boat.firebasestorage.app",
-  messagingSenderId: "219671607144",
-  appId: "1:219671607144:web:418e80a4610666b7c188dd",
-  measurementId: "G-92YNJ5QNL5"
+  apiKey:            "PASTE_YOUR_API_KEY_HERE",
+  authDomain:        "PASTE_YOUR_AUTH_DOMAIN_HERE",
+  databaseURL:       "PASTE_YOUR_DATABASE_URL_HERE",
+  projectId:         "PASTE_YOUR_PROJECT_ID_HERE",
+  storageBucket:     "PASTE_YOUR_STORAGE_BUCKET_HERE",
+  messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
+  appId:             "PASTE_YOUR_APP_ID_HERE"
 };
 const TEAM_NAME_DEFAULT = "Otter Chaos Dragon Boat";
 const APP_URL = "https://jerrylu7.github.io/Otter-Chaos-Dragon-Boat/";
@@ -1932,12 +1931,12 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
     ${!ed?'<div class="readonly-notice" style="margin-bottom:12px">👁 View only — coaches and admins can edit the lineup.</div>':''}
     <div id="lineup-boat-config" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
       ${ed ? `
-        <select id="lineup-boat-type-sel" onchange="changeLineupBoatType('${evId}',this.value)" style="max-width:200px;font-size:13px;padding:6px 10px">
+        <select id="lineup-boat-type-sel" onchange="changeLineupBoatType('${evId}',this.value,event)" style="max-width:200px;font-size:13px;padding:6px 10px">
           <option value="10" ${boatType==10?'selected':''}>🛶 10-person boat</option>
           <option value="20" ${boatType==20?'selected':''}>🛶 20-person boat</option>
           <option value="24" ${boatType==24?'selected':''}>🛶 24-person boat</option>
         </select>
-        <select id="lineup-boat-count-sel" onchange="changeLineupBoatCount('${evId}',this.value)" style="max-width:150px;font-size:13px;padding:6px 10px">
+        <select id="lineup-boat-count-sel" onchange="changeLineupBoatCount('${evId}',this.value,event)" style="max-width:150px;font-size:13px;padding:6px 10px">
           <option value="1" ${boatCount==1?'selected':''}>1 boat</option>
           <option value="2" ${boatCount==2?'selected':''}>2 boats</option>
           <option value="3" ${boatCount==3?'selected':''}>3 boats</option>
@@ -1946,7 +1945,7 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
       ` : `<span class="badge" style="background:var(--accent-bg);color:var(--accent-text);font-size:12px">🛶 ${boatTypeLabel(boatType)} boat · ${totalSeats} seats${boatCount>1?' · '+boatCount+' boats':''}</span>`}
     </div>
     ${boatCount>1 ? `<div id="lineup-boat-tabs" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
-      ${Array.from({length:boatCount},(_,i)=>i+1).map(b=>`<button class="btn btn-sm ${b===(window._currentBoat||1)?'btn-primary':'btn-ghost'}" onclick="switchLineupBoat('${evId}',${b})">🚣 Boat ${b}</button>`).join('')}
+      ${Array.from({length:boatCount},(_,i)=>i+1).map(b=>`<button class="btn btn-sm ${b===(window._currentBoat||1)?'btn-primary':'btn-ghost'}" onclick="switchLineupBoat('${evId}',${b},event)">🚣 Boat ${b}</button>`).join('')}
     </div>` : ''}
     ${balPanel}
     <div class="boat-visual" style="margin-bottom:12px;padding:14px">
@@ -5415,7 +5414,8 @@ window.removeCarpool = async function(evId, key) {
 window._currentBoat = 1;
 
 // Change boat type (10/20/24-person) for THIS event only — doesn't affect team default
-window.changeLineupBoatType = async function(evId, newType) {
+window.changeLineupBoatType = async function(evId, newType, domEvent) {
+  if (domEvent) { domEvent.preventDefault(); domEvent.stopPropagation(); }
   if (!can.edit()) return;
   await db.ref('events/'+evId+'/boatType').set(Number(newType));
   if (window._evPage) window._evPage.ev.boatType = Number(newType);
@@ -5423,11 +5423,16 @@ window.changeLineupBoatType = async function(evId, newType) {
   logChange('Changed boat type for event '+evId+' to '+newType+'-person');
   const lineupKey = window._currentBoat>1 ? 'lineups/'+evId+'_boat'+window._currentBoat : 'lineups/'+evId;
   const snap = await db.ref(lineupKey).get();
-  renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, snap.val()||{});
+  if (window._evPage) {
+    window._evPage.lineup = snap.val()||{};
+    renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, window._evPage.lineup);
+  }
+  return false;
 };
 
 // Change number of boats for THIS event only
-window.changeLineupBoatCount = async function(evId, newCount) {
+window.changeLineupBoatCount = async function(evId, newCount, domEvent) {
+  if (domEvent) { domEvent.preventDefault(); domEvent.stopPropagation(); }
   if (!can.edit()) return;
   await db.ref('events/'+evId+'/boatCount').set(Number(newCount));
   if (window._evPage) window._evPage.ev.boatCount = Number(newCount);
@@ -5435,18 +5440,25 @@ window.changeLineupBoatCount = async function(evId, newCount) {
   showToast('Number of boats updated 🚣');
   logChange('Changed boat count for event '+evId+' to '+newCount);
   const snap = await db.ref('lineups/'+evId).get();
-  renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, snap.val()||{});
+  if (window._evPage) {
+    window._evPage.lineup = snap.val()||{};
+    renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, window._evPage.lineup);
+  }
+  return false;
 };
 
 // Switch which boat's lineup is being edited (when boatCount > 1)
-window.switchLineupBoat = function(evId, boatNum) {
+window.switchLineupBoat = function(evId, boatNum, domEvent) {
+  if (domEvent) { domEvent.preventDefault(); domEvent.stopPropagation(); }
   window._currentBoat = boatNum;
   if (window._evPage) {
     const lineupKey = boatNum>1 ? 'lineups/'+evId+'_boat'+boatNum : 'lineups/'+evId;
     db.ref(lineupKey).get().then(snap=>{
-      renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, snap.val()||{});
+      window._evPage.lineup = snap.val()||{};
+      renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, window._evPage.lineup);
     });
   }
+  return false;
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
