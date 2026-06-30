@@ -1335,6 +1335,10 @@ function navigate(page) {
   const _page = page;
   clearTimeout(window._navTimeout);
   window._navTimeout = setTimeout(() => {
+    // Guard: only act if we're still actually on the page this timer was set for.
+    // Without this check, navigating away (e.g. into an event detail page) before
+    // the 8s elapses would let this stale timer wipe out unrelated content later.
+    if (currentPage !== _page) return;
     const C = document.getElementById('pg-content');
     if (C && C.querySelector('.spinner')) {
       C.innerHTML = `<div class="card" style="padding:24px;text-align:center;max-width:360px;margin:40px auto">
@@ -1735,8 +1739,13 @@ function renderDashEventList(allEvents, uid, mySeat) {
 window.openEventDetail = function(evId, domEvent) {
   if (domEvent && domEvent.target.closest('.rsvp-action-btns')) return;
 
+  // Clear any pending "taking a while" timeout from the previous navigate() call —
+  // otherwise it can fire later while we're on this page and wipe out pg-content.
+  clearTimeout(window._navTimeout);
+
   // Navigate to a dedicated event detail page instead of a modal
   const prev = currentPage;
+  currentPage = 'event-detail'; // distinct value so stale nav timeouts never match this page
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   document.getElementById('pg-content').innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading…</div>';
   document.getElementById('pg-actions').innerHTML = '';
