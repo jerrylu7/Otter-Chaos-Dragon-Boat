@@ -239,7 +239,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 }
 
 /* Nav */
-.sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; touch-action: pan-y; }
+.sidebar-nav { flex: 1; padding: 10px 8px; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
 .nav-item {
   display: flex; align-items: center; gap: 10px;
   padding: 9px 12px; border-radius: var(--radius);
@@ -559,7 +559,7 @@ tbody tr:hover td { background: var(--surface-alt); }
 }
 .mob-page-actions:empty { display: none !important; }
 .mob-page-actions .btn { font-size: 14px; min-height: 40px; }
-.mob-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 45; touch-action: manipulation; }
+.mob-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 45; }
 .mob-overlay.open { display: block; }
 .sidebar.mob-open { transform: translateX(0) !important; width: 224px !important; }
 .sidebar.mob-open .sb-logo-text,
@@ -828,7 +828,7 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 
 <!-- App -->
 <div id="app">
-  <div class="mob-overlay" id="mobOverlay" onclick="closeSidebar()" ontouchstart="closeSidebar()"></div>
+  <div class="mob-overlay" id="mobOverlay" onclick="closeSidebar()"></div>
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-logo">
@@ -4068,21 +4068,8 @@ window.saveSettings = async () => {
 };
 
 // ─── Mobile sidebar ────────────────────────────────────────────────────────────
-function openSidebar()  {
-  document.getElementById('sidebar').classList.add('mob-open');
-  document.getElementById('mobOverlay').classList.add('open');
-}
-function closeSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.getElementById('mobOverlay');
-  sidebar.classList.remove('mob-open');
-  overlay.classList.remove('open');
-  // iOS Safari can occasionally leave the fixed-position sidebar intercepting touches
-  // after a scroll gesture inside it. Forcing a brief pointer-events reset on close
-  // guarantees the background becomes touchable again immediately.
-  sidebar.style.pointerEvents = 'none';
-  requestAnimationFrame(() => { sidebar.style.pointerEvents = ''; });
-}
+function openSidebar()  { document.getElementById('sidebar').classList.add('mob-open');    document.getElementById('mobOverlay').classList.add('open'); }
+function closeSidebar() { document.getElementById('sidebar').classList.remove('mob-open'); document.getElementById('mobOverlay').classList.remove('open'); }
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
 
 // ═══════════════════════════════════════════════════════════════════════════════
