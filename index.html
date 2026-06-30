@@ -2,9 +2,43 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>OtterChaos</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐉</text></svg>">
+
+<!-- ── PWA / Add to Home Screen support ── -->
+<meta name="description" content="Team management for Otter Chaos Dragon Boat — RSVPs, lineups, attendance and more.">
+<meta name="theme-color" content="#4a6fa5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="OtterChaos">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%234a6fa5'/><text x='50' y='68' font-size='60' text-anchor='middle'>🐉</text></svg>">
+<link rel="manifest" id="pwa-manifest-link">
+<script>
+// Build the web app manifest inline as a Blob URL so this stays a single-file app
+(function(){
+  const manifest = {
+    name: "OtterChaos — Dragon Boat Team",
+    short_name: "OtterChaos",
+    description: "Team management for dragon boat paddling teams",
+    start_url: location.pathname,
+    scope: location.pathname,
+    display: "standalone",
+    background_color: "#f4f3ef",
+    theme_color: "#4a6fa5",
+    orientation: "portrait-primary",
+    icons: [
+      { src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%234a6fa5'/><text x='50' y='68' font-size='58' text-anchor='middle'>🐉</text></svg>", sizes: "192x192", type: "image/svg+xml" },
+      { src: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%234a6fa5'/><text x='50' y='68' font-size='58' text-anchor='middle'>🐉</text></svg>", sizes: "512x512", type: "image/svg+xml" },
+    ]
+  };
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  document.getElementById('pwa-manifest-link').setAttribute('href', url);
+})();
+</script>
+
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
@@ -1820,12 +1854,24 @@ function renderEvDetailRsvp(evId, ev, members, lineup, uid) {
     </div>`;
 }
 
+// Boat type → number of paddler rows (each row = 2 seats, left + right)
+const BOAT_TYPE_ROWS = { 10: 5, 20: 10, 24: 12 };
+function boatTypeLabel(n) { return n+'-person'; }
+
 function renderEvDetailLineup(evId, ev, members, lineup) {
   const body = document.getElementById('ev-detail-body'); if(!body) return;
   const ed = can.edit();
   const uid = currentUser.uid;
 
-  const ROWS = 10;
+  // Fetch boat type setting, then render
+  db.ref('settings/boatType').get().then(typeSnap => {
+    const boatType = typeSnap.val() || 20; // default to 20-person
+    const ROWS = BOAT_TYPE_ROWS[boatType] || 10;
+    renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType);
+  });
+}
+
+function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType) {
   const goingUids = new Set(Object.entries(ev.rsvps||{}).filter(([,v])=>v==='yes').map(([k])=>k));
 
   function seatName(key) {
@@ -1876,8 +1922,13 @@ function renderEvDetailLineup(evId, ev, members, lineup) {
   ${Math.abs(bal.lCount-bal.rCount)>1?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--warning-text);margin-bottom:8px">⚖️ Side imbalance: ${Math.abs(bal.lCount-bal.rCount)} more ${bal.lCount>bal.rCount?'left':'right'}-side paddlers</div>`:''}
   ${bal.wImbalance>10?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--warning-text);margin-bottom:10px">⚖️ Weight imbalance: ${bal.wImbalance} lbs between sides</div>`:''}` : '';
 
+  const totalSeats = ROWS*2 + 2; // +drummer +steers
   body.innerHTML = `
     ${!ed?'<div class="readonly-notice" style="margin-bottom:12px">👁 View only — coaches and admins can edit the lineup.</div>':''}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <span class="badge" style="background:var(--accent-bg);color:var(--accent-text);font-size:12px">🛶 ${boatTypeLabel(boatType)} boat · ${totalSeats} seats</span>
+      ${ed?`<a href="#" onclick="navigate('settings');return false" style="font-size:12px;color:var(--text-3)">Change boat type in Settings →</a>`:''}
+    </div>
     ${balPanel}
     <div class="boat-visual" style="margin-bottom:12px;padding:14px">
       <div style="text-align:center;margin-bottom:6px">
@@ -2875,6 +2926,7 @@ window.openMemberProfile = function(memberUid) {
         </div>
         <textarea id="mp-note-input" rows="3" style="width:100%;margin-top:10px;resize:vertical;font-size:14px;box-sizing:border-box" placeholder="Add coaching note (feedback, technique, goals…)"></textarea>
         <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="addMemberNote('${memberUid}')">Add note</button>
+        ${renderMedicalFlagSection(memberUid, m.medicalNote, false)}
       </div>
 
       <div class="modal-footer" style="flex-shrink:0">
@@ -3823,6 +3875,18 @@ function pgSettings() {
     const s = snap.val()||{};
     C.innerHTML=`
       <div class="card" style="padding:24px;max-width:520px;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:700;margin-bottom:16px">🔒 Security rules</div>
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">By default, any approved member can read and write any data in your Firebase database. For better security, paste these rules into <strong>Firebase Console → Realtime Database → Rules</strong>:</p>
+        <div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:12px;font-size:11px;font-family:monospace;color:var(--text-2);max-height:300px;overflow-y:auto;white-space:pre" id="security-rules-box">${esc(SECURE_FIREBASE_RULES)}</div>
+        <button class="btn btn-sm" style="margin-top:10px" onclick="navigator.clipboard.writeText(document.getElementById('security-rules-box').textContent).then(()=>showToast('Rules copied!','🔒'))">Copy rules</button>
+        <p style="font-size:12px;color:var(--text-3);margin-top:10px">These rules let members RSVP and edit only their own profile/availability, while only coaches/admins can edit events, lineups, roles and team settings.</p>
+      </div>
+      <div class="card" style="padding:24px;max-width:520px;margin-bottom:16px">
+        <div style="font-size:16px;font-weight:700;margin-bottom:16px">💾 Backup &amp; export</div>
+        <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">Download a full copy of your team's data as a JSON file. Keep this somewhere safe in case anything ever needs to be restored.</p>
+        <button class="btn btn-primary btn-sm" onclick="exportAllData()">⬇ Export all data</button>
+      </div>
+      <div class="card" style="padding:24px;max-width:520px;margin-bottom:16px">
         <div style="font-size:16px;font-weight:700;margin-bottom:16px">Team identity</div>
         <div class="form-group"><label class="form-label">Team name</label><input id="s-name" value="${esc(s.teamName||TEAM_NAME_DEFAULT)}"></div>
         <div class="form-group">
@@ -3834,6 +3898,24 @@ function pgSettings() {
           <label class="form-label">RSVP deadline (hours before event)</label>
           <input id="s-rsvp-deadline" type="number" min="0" max="168" value="${esc(s.rsvpDeadlineHours||'')}" placeholder="e.g. 48">
           <div style="font-size:12px;color:var(--text-3);margin-top:4px">RSVPs will lock this many hours before an event starts. Leave blank to never lock.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Boat type</label>
+          <select id="s-boat-type">
+            <option value="10" ${(s.boatType==10)?'selected':''}>10-person boat (5 rows + drummer + steers)</option>
+            <option value="20" ${(!s.boatType||s.boatType==20)?'selected':''}>20-person boat (10 rows + drummer + steers)</option>
+            <option value="24" ${(s.boatType==24)?'selected':''}>24-person boat (12 rows + drummer + steers)</option>
+          </select>
+          <div style="font-size:12px;color:var(--text-3);margin-top:4px">Sets how many paddler seats appear in the lineup builder for every event.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Number of boats</label>
+          <select id="s-boat-count">
+            <option value="1" ${(!s.boatCount||s.boatCount==1)?'selected':''}>1 boat</option>
+            <option value="2" ${s.boatCount==2?'selected':''}>2 boats</option>
+            <option value="3" ${s.boatCount==3?'selected':''}>3 boats</option>
+          </select>
+          <div style="font-size:12px;color:var(--text-3);margin-top:4px">If your team fields multiple boats for events, lineups can be split across each one.</div>
         </div>
         <div class="form-group">
           <label class="form-label">Team logo</label>
@@ -3909,7 +3991,9 @@ window.saveSettings = async () => {
   const attendanceThreshold = threshRaw ? Number(threshRaw) : null;
   const deadlineRaw = document.getElementById('s-rsvp-deadline')?.value?.trim();
   const rsvpDeadlineHours = deadlineRaw ? Number(deadlineRaw) : null;
-  const settingsUpdate = { teamName: name, logoUrl: logoUrl||'' };
+  const boatCount = Number(document.getElementById('s-boat-count')?.value||1);
+  const boatType = Number(document.getElementById('s-boat-type')?.value||20);
+  const settingsUpdate = { teamName: name, logoUrl: logoUrl||'', boatCount, boatType };
   if (attendanceThreshold !== null) settingsUpdate.attendanceThreshold = attendanceThreshold;
   else settingsUpdate.attendanceThreshold = null;
   if (rsvpDeadlineHours !== null) settingsUpdate.rsvpDeadlineHours = rsvpDeadlineHours;
@@ -3917,6 +4001,7 @@ window.saveSettings = async () => {
   await db.ref('settings').update(settingsUpdate);
   applyLogo(logoUrl);
   showToast('Settings saved','✓');
+  logChange('Updated team settings');
 };
 
 // ─── Mobile sidebar ────────────────────────────────────────────────────────────
@@ -4579,8 +4664,8 @@ window.deleteDebrief = async function(evId, key) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // WEIGHT DISTRIBUTION VISUALIZER (in lineup tab)
 // ═══════════════════════════════════════════════════════════════════════════════
-function renderWeightChart(lineup, members) {
-  const ROWS = 10;
+function renderWeightChart(lineup, members, rowCount) {
+  const ROWS = rowCount || 10;
   const rows = [];
   for (let r=1;r<=ROWS;r++) {
     const lUid=lineup[`row${r}_left`], rUid=lineup[`row${r}_right`];
@@ -5012,17 +5097,23 @@ window.createBulkEvents = async function() {
 const _origRenderLineup = renderEvDetailLineup;
 renderEvDetailLineup = function(evId, ev, members, lineup) {
   _origRenderLineup(evId, ev, members, lineup);
-  // Add template buttons
-  if (can.edit()) addLineupTemplateButtons(evId);
-  // Add weight chart
-  const body = document.getElementById('ev-detail-body');
-  if (body && (ev.type==='Practice'||ev.type==='Race')) {
-    const wDiv = document.createElement('div');
-    wDiv.innerHTML = renderWeightChart(lineup, members);
-    body.appendChild(wDiv);
-    // Add debrief section for past practices
-    if (ev.date < today()) renderDebriefSection(evId);
-  }
+  // Add template buttons + weight chart + debrief, after boat type loads and rows render
+  db.ref('settings/boatType').get().then(typeSnap => {
+    const boatType = typeSnap.val() || 20;
+    const rowCount = BOAT_TYPE_ROWS[boatType] || 10;
+    // Small delay ensures the base lineup body.innerHTML (set by the parallel fetch in
+    // renderEvDetailLineup) has finished rendering before we prepend/append to it.
+    setTimeout(() => {
+      if (can.edit()) addLineupTemplateButtons(evId);
+      const body = document.getElementById('ev-detail-body');
+      if (body && (ev.type==='Practice'||ev.type==='Race')) {
+        const wDiv = document.createElement('div');
+        wDiv.innerHTML = renderWeightChart(lineup, members, rowCount);
+        body.appendChild(wDiv);
+        if (ev.date < today()) renderDebriefSection(evId);
+      }
+    }, 50);
+  });
 };
 
 // Wire up guest RSVPs in RSVP tab
@@ -5046,6 +5137,8 @@ renderEvDetailRsvp = function(evId, ev, members, lineup, uid) {
     ${can.edit()?`<button class="btn btn-sm btn-ghost" style="margin-top:8px" onclick="addGuestRsvp('${evId}')">＋ Add guest</button>`:''}
   </div>`;
   body.appendChild(gSection);
+  // Add carpool section
+  renderCarpoolSection(evId);
 };
 
 // Wire up push notifications prompt in settings
@@ -5054,15 +5147,33 @@ pgSettings = function() {
   _origPgSettings();
   setTimeout(()=>{
     const C = document.getElementById('pg-content'); if(!C) return;
-    const pushOn = Notification.permission==='granted';
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    const isStandalone = window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    const pushOn = ('Notification' in window) && Notification.permission==='granted';
     const pushSection=document.createElement('div');
     pushSection.className='card'; pushSection.style.cssText='padding:20px;max-width:520px;margin-bottom:16px;margin-top:16px';
-    pushSection.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <span style="font-size:16px;font-weight:700">🔔 Push notifications</span>
-      <span class="${pushOn?'rsvp-status-pill yes':'rsvp-status-pill no'}">${pushOn?'✓ Enabled':'✗ Off'}</span>
-    </div>
-    <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">Get browser notifications for upcoming practices, announcements and messages — even when the tab is in the background.</p>
-    ${!pushOn?`<button class="btn btn-primary" onclick="requestPushPermission()">Enable notifications</button>`:`<p style="font-size:13px;color:var(--success-text)">✓ Notifications are enabled. You'll be notified on this device.</p>`}`;
+
+    if (isIOS && !isStandalone) {
+      pushSection.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:16px;font-weight:700">🔔 Push notifications</span>
+        <span class="rsvp-status-pill no">📱 iPhone setup needed</span>
+      </div>
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">iPhone requires the app to be added to your Home Screen before notifications work. This is a one-time setup:</p>
+      <ol style="font-size:13px;color:var(--text-2);margin:0 0 12px 18px;line-height:1.8">
+        <li>Tap the <strong>Share</strong> button <span style="display:inline-block">⬆️</span> at the bottom of Safari</li>
+        <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+        <li>Open OtterChaos from the new icon on your Home Screen (not from Safari)</li>
+        <li>Come back to this page to enable notifications</li>
+      </ol>
+      <p style="font-size:12px;color:var(--text-3)">Requires iOS 16.4 or later. This only needs to be done once.</p>`;
+    } else {
+      pushSection.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:16px;font-weight:700">🔔 Push notifications</span>
+        <span class="${pushOn?'rsvp-status-pill yes':'rsvp-status-pill no'}">${pushOn?'✓ Enabled':'✗ Off'}</span>
+      </div>
+      <p style="font-size:13px;color:var(--text-2);margin-bottom:12px">Get browser notifications for upcoming practices, announcements and messages — even when the tab is in the background.</p>
+      ${!pushOn?`<button class="btn btn-primary" onclick="requestPushPermission()">Enable notifications</button>`:`<p style="font-size:13px;color:var(--success-text)">✓ Notifications are enabled. You'll be notified on this device.</p>`}`;
+    }
     C.appendChild(pushSection);
   }, 300);
 };
@@ -5126,6 +5237,191 @@ if (_origSaveEvt) {
     const name = document.getElementById('ef-name')?.value?.trim();
     logChange((isNew?'Created':'Edited')+' event: '+(name||id));
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECURE FIREBASE RULES (documentation shown in Settings)
+// ═══════════════════════════════════════════════════════════════════════════════
+const SECURE_FIREBASE_RULES = `{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
+      }
+    },
+    "events": {
+      ".read": "auth != null",
+      ".indexOn": ["date"],
+      "$eventId": {
+        ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'",
+        "rsvps": {
+          "$uid": { ".write": "auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" }
+        },
+        "guests": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" }
+      }
+    },
+    "lineups": {
+      ".read": "auth != null",
+      ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
+    },
+    "lineupTemplates": {
+      ".read": "auth != null",
+      ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
+    },
+    "availability": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
+      }
+    },
+    "profileMedia": { "$uid": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" } },
+    "profileNotes":  { "$uid": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" } },
+    "debriefs":      { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
+    "announcements": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
+    "messages": { ".read": "auth != null", ".write": "auth != null" },
+    "carpool":  { ".read": "auth != null", ".write": "auth != null" },
+    "settings": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" },
+    "changelog": { ".read": "root.child('users').child(auth.uid).child('role').val() === 'admin'", ".write": "auth != null" },
+    "raceHeats": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
+    ".read": false,
+    ".write": false
+  }
+}`;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DATA EXPORT / BACKUP
+// ═══════════════════════════════════════════════════════════════════════════════
+window.exportAllData = async function() {
+  if (!can.admin()) return;
+  showToast('Preparing export…','💾');
+  try {
+    const snap = await db.ref('/').get();
+    const data = snap.val()||{};
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `otterchaos-backup-${today()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('Backup downloaded ✓','💾');
+    logChange('Exported full data backup');
+  } catch(e) {
+    showToast('Export failed — check your connection','⚠️');
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CARPOOL COORDINATION
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderCarpoolSection(evId) {
+  db.ref('carpool/'+evId).get().then(snap => {
+    const entries = Object.entries(snap.val()||{});
+    const uid = currentUser.uid;
+    const myEntry = entries.find(([,c])=>c.uid===uid);
+    const existing = document.getElementById('carpool-section');
+    const section = existing || document.createElement('div');
+    section.id = 'carpool-section';
+    section.style.marginTop = '16px';
+
+    const offering = entries.filter(([,c])=>c.type==='offer');
+    const needing  = entries.filter(([,c])=>c.type==='need');
+
+    section.innerHTML = `<div class="dash-section-title">🚗 Carpool</div>
+      <div class="card" style="padding:14px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;margin-bottom:6px">🚙 Offering a ride (${offering.length})</div>
+            ${offering.length?offering.map(([key,c])=>`<div style="font-size:13px;padding:4px 0">${esc(c.name)} ${c.seats?'· '+c.seats+' seats':''}${c.uid===uid?` <button onclick="removeCarpool('${evId}','${key}')" style="background:none;border:none;color:var(--danger-text);cursor:pointer;font-size:11px">✕</button>`:''}</div>`).join(''):'<div style="font-size:12px;color:var(--text-3)">No one yet</div>'}
+          </div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;margin-bottom:6px">🙋 Need a ride (${needing.length})</div>
+            ${needing.length?needing.map(([key,c])=>`<div style="font-size:13px;padding:4px 0">${esc(c.name)}${c.uid===uid?` <button onclick="removeCarpool('${evId}','${key}')" style="background:none;border:none;color:var(--danger-text);cursor:pointer;font-size:11px">✕</button>`:''}</div>`).join(''):'<div style="font-size:12px;color:var(--text-3)">No one yet</div>'}
+          </div>
+        </div>
+        ${!myEntry?`<div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="addCarpool('${evId}','offer')">🚙 I can offer a ride</button>
+          <button class="btn btn-sm" onclick="addCarpool('${evId}','need')">🙋 I need a ride</button>
+        </div>`:`<div style="font-size:12px;color:var(--text-3)">You're listed as ${myEntry[1].type==='offer'?'offering':'needing'} a ride.</div>`}
+      </div>`;
+    if (!existing) {
+      const body = document.getElementById('ev-detail-body');
+      if (body) body.appendChild(section);
+    }
+  });
+}
+
+window.addCarpool = async function(evId, type) {
+  let seats = null;
+  if (type === 'offer') {
+    seats = prompt('How many spare seats do you have? (optional)');
+  }
+  const key = db.ref('carpool/'+evId).push().key;
+  await db.ref('carpool/'+evId+'/'+key).set({ uid:currentUser.uid, name:currentProfile.name, type, seats: seats?Number(seats):null, ts:Date.now() });
+  showToast('Added to carpool list ✓','🚗');
+  renderCarpoolSection(evId);
+};
+window.removeCarpool = async function(evId, key) {
+  await db.ref('carpool/'+evId+'/'+key).remove();
+  showToast('Removed','🗑');
+  renderCarpoolSection(evId);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MULTI-BOAT LINEUP SUPPORT
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderBoatSelector(evId, currentBoat) {
+  return db.ref('settings/boatCount').get().then(snap => {
+    const boatCount = snap.val()||1;
+    if (boatCount <= 1) return '';
+    let html = '<div style="display:flex;gap:6px;margin-bottom:12px">';
+    for (let b=1; b<=boatCount; b++) {
+      html += `<button class="btn btn-sm ${b===currentBoat?'btn-primary':'btn-ghost'}" onclick="switchLineupBoat('${evId}',${b})">🚣 Boat ${b}</button>`;
+    }
+    html += '</div>';
+    return html;
+  });
+}
+
+window._currentBoat = 1;
+window.switchLineupBoat = function(evId, boatNum) {
+  window._currentBoat = boatNum;
+  if (window._evPage) {
+    db.ref('lineups/'+evId+(boatNum>1?'_boat'+boatNum:'')).get().then(snap=>{
+      renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, snap.val()||{});
+    });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MEDICAL / INJURY FLAG (coach-only field on profile)
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderMedicalFlagSection(memberUid, currentNote, isOwnProfile) {
+  if (!can.edit()) return '';
+  return `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+    <div style="font-size:11px;font-weight:700;color:var(--danger-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">🩹 Medical / injury note (coach-only)</div>
+    <textarea id="medical-note-${memberUid}" style="min-height:60px;resize:vertical;font-size:13px" placeholder="e.g. Recovering from shoulder injury — avoid heavy side, cleared for light paddling only">${esc(currentNote||'')}</textarea>
+    <button class="btn btn-sm btn-primary" style="margin-top:6px" onclick="saveMedicalNote('${memberUid}')">Save note</button>
+    <div style="font-size:11px;color:var(--text-3);margin-top:4px">Only visible to coaches and admins — never shown to other paddlers.</div>
+  </div>`;
+}
+
+window.saveMedicalNote = async function(memberUid) {
+  if (!can.edit()) return;
+  const text = document.getElementById('medical-note-'+memberUid)?.value?.trim();
+  await db.ref('users/'+memberUid+'/medicalNote').set(text||null);
+  showToast('Medical note saved ✓','🩹');
+  logChange('Updated medical note for a member');
+};
+
+// Show medical flag warning badge in seat picker
+function medicalFlagBadge(member) {
+  if (!member.medicalNote || !can.edit()) return '';
+  return `<span class="badge" style="background:var(--danger-bg);color:var(--danger-text);font-size:10px" title="${esc(member.medicalNote)}">🩹 Note</span>`;
 }
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
