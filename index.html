@@ -878,6 +878,26 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
 // ─── Globals ──────────────────────────────────────────────────────────────────
 let db, auth, currentUser, currentProfile, currentPage = 'roster', modalEl = null, toastTimer = null;
 
+// ── Page-scoped Firebase listener tracking ──────────────────────────────────────
+// Several pages (Practices/Races/Socials, Roster, Lineup, Approvals, etc.) attach
+// live .on('value', ...) listeners to render their content. If you navigate away
+// without detaching them, they keep firing in the background and can silently
+// overwrite whatever page you're currently looking at when the underlying data
+// changes. window._pageListeners tracks every listener registered by the current
+// page so navigate()/openEventDetail() can detach them all before switching pages.
+window._pageListeners = [];
+function trackListener(ref, eventType, callback) {
+  ref.on(eventType, callback);
+  window._pageListeners.push({ ref, eventType, callback });
+  return callback;
+}
+function detachPageListeners() {
+  window._pageListeners.forEach(({ ref, eventType, callback }) => {
+    try { ref.off(eventType, callback); } catch(e) {}
+  });
+  window._pageListeners = [];
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const can = {
   edit:   () => ['admin','coach'].includes(currentProfile?.role),
@@ -1321,6 +1341,7 @@ const PAGE_META = {
 };
 
 function navigate(page) {
+  detachPageListeners(); // stop any live listeners from the page we're leaving
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   document.getElementById('nav-'+page)?.classList.add('active');
@@ -1738,6 +1759,10 @@ function renderDashEventList(allEvents, uid, mySeat) {
 
 window.openEventDetail = function(evId, domEvent) {
   if (domEvent && domEvent.target.closest('.rsvp-action-btns')) return;
+
+  // Stop any live listeners from the page we're leaving (Practices/Races/Roster/etc.)
+  // so they can't silently overwrite this page's content later.
+  detachPageListeners();
 
   // Clear any pending "taking a while" timeout from the previous navigate() call —
   // otherwise it can fire later while we're on this page and wipe out pg-content.
@@ -2471,7 +2496,7 @@ function pgFilteredEvents(typeFilter) {
     A.appendChild(b);
   }
 
-  db.ref('events').orderByChild('date').on('value', snap => {
+  trackListener(db.ref('events').orderByChild('date'), 'value', snap => {
     db.ref('lineups').get().then(lSnap => {
       const lineups = lSnap.val() || {};
       const all = Object.values(snap.val()||{})
@@ -2799,7 +2824,7 @@ function pgRoster() {
     const ib=document.createElement('button'); ib.className='btn'; ib.innerHTML='🔗 Invite link'; ib.onclick=showInviteModal; A.appendChild(ib);
   }
 
-  db.ref('users').on('value', snap => {
+  trackListener(db.ref('users'), 'value', snap => {
     const members = Object.values(snap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
 
     // Paddlers + testers: names and sides only
@@ -3135,7 +3160,7 @@ window.saveMember = async (uidArg, isNew) => {
 function pgLineup() {
   if (!can.view()) { navigate('dashboard'); return; }
   const C = document.getElementById('pg-content');
-  db.ref('events').orderByChild('date').on('value', snap => {
+  trackListener(db.ref('events').orderByChild('date'), 'value', snap => {
     const evs = Object.values(snap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
     const upcoming = evs.filter(e=>e.date>=today());
     const all = [...upcoming, ...evs.filter(e=>e.date<today())];
@@ -3154,7 +3179,7 @@ function pgLineup() {
 window.loadLineup = evId => {
   if (!evId) { document.getElementById('lineup-body').innerHTML=''; return; }
   db.ref('users').get().then(uSnap => {
-    db.ref('lineups/'+evId).on('value', lSnap => {
+    trackListener(db.ref('lineups/'+evId), 'value', lSnap => {
       drawBoat(evId, lSnap.val()||{}, Object.values(uSnap.val()||{}).filter(u=>u.approved));
     });
   });
@@ -3272,7 +3297,7 @@ function pgEvents() {
   if (can.edit()) {
     const b=document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Add event'; b.onclick=()=>openEvtModal(null); A.appendChild(b);
   }
-  db.ref('events').orderByChild('date').on('value', snap => {
+  trackListener(db.ref('events').orderByChild('date'), 'value', snap => {
     const evs = Object.values(snap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
     db.ref('users').get().then(uSnap => {
       const mc = Object.values(uSnap.val()||{}).filter(u=>u.approved).length;
@@ -3835,7 +3860,7 @@ window.mlto   = (id,g) => { const d=window._rd[id]; if(!d)return; const ms=g==='
 function pgApprovals() {
   if (!can.admin()) { navigate('roster'); return; }
   const C = document.getElementById('pg-content');
-  db.ref('users').on('value', snap => {
+  trackListener(db.ref('users'), 'value', snap => {
     const all      = Object.values(snap.val()||{});
     const pending  = all.filter(u=>!u.approved);
     const approved = all.filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
@@ -4062,7 +4087,7 @@ function pgAnnouncements() {
     const b = document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Post announcement'; b.onclick=openAnnouncementModal; A.appendChild(b);
   }
 
-  db.ref('announcements').on('value', snap => {
+  trackListener(db.ref('announcements'), 'value', snap => {
     const items = Object.entries(snap.val()||{}).sort((a,b)=>b[1].ts-a[1].ts);
     if (!items.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">📣</div><div class="empty-title">No announcements yet</div><div class="empty-sub">Coaches can post updates, reminders and notices here.</div></div></div>`; return; }
     C.innerHTML = items.map(([key,a])=>`
