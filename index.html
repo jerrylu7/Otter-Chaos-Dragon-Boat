@@ -1781,6 +1781,7 @@ window.openEventDetail = function(evId, domEvent) {
 
     // Store data on window for tab switching
     window._evPage = { evId, ev, members, lineup, uid, prev };
+    window._currentBoat = 1; // reset boat selector for each fresh event page
 
     // Build tab bar + content area
     const C = document.getElementById('pg-content');
@@ -1863,15 +1864,19 @@ function renderEvDetailLineup(evId, ev, members, lineup) {
   const ed = can.edit();
   const uid = currentUser.uid;
 
-  // Fetch boat type setting, then render
-  db.ref('settings/boatType').get().then(typeSnap => {
-    const boatType = typeSnap.val() || 20; // default to 20-person
+  // Per-event boat type/count override falls back to the team-wide default in Settings
+  Promise.all([
+    db.ref('settings/boatType').get(),
+    db.ref('settings/boatCount').get(),
+  ]).then(([typeSnap, countSnap]) => {
+    const boatType  = ev.boatType  || typeSnap.val()  || 20;
+    const boatCount = ev.boatCount || countSnap.val() || 1;
     const ROWS = BOAT_TYPE_ROWS[boatType] || 10;
-    renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType);
+    renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType, boatCount);
   });
 }
 
-function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType) {
+function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType, boatCount) {
   const goingUids = new Set(Object.entries(ev.rsvps||{}).filter(([,v])=>v==='yes').map(([k])=>k));
 
   function seatName(key) {
@@ -1925,10 +1930,24 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
   const totalSeats = ROWS*2 + 2; // +drummer +steers
   body.innerHTML = `
     ${!ed?'<div class="readonly-notice" style="margin-bottom:12px">👁 View only — coaches and admins can edit the lineup.</div>':''}
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-      <span class="badge" style="background:var(--accent-bg);color:var(--accent-text);font-size:12px">🛶 ${boatTypeLabel(boatType)} boat · ${totalSeats} seats</span>
-      ${ed?`<a href="#" onclick="navigate('settings');return false" style="font-size:12px;color:var(--text-3)">Change boat type in Settings →</a>`:''}
+    <div id="lineup-boat-config" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      ${ed ? `
+        <select id="lineup-boat-type-sel" onchange="changeLineupBoatType('${evId}',this.value)" style="max-width:200px;font-size:13px;padding:6px 10px">
+          <option value="10" ${boatType==10?'selected':''}>🛶 10-person boat</option>
+          <option value="20" ${boatType==20?'selected':''}>🛶 20-person boat</option>
+          <option value="24" ${boatType==24?'selected':''}>🛶 24-person boat</option>
+        </select>
+        <select id="lineup-boat-count-sel" onchange="changeLineupBoatCount('${evId}',this.value)" style="max-width:150px;font-size:13px;padding:6px 10px">
+          <option value="1" ${boatCount==1?'selected':''}>1 boat</option>
+          <option value="2" ${boatCount==2?'selected':''}>2 boats</option>
+          <option value="3" ${boatCount==3?'selected':''}>3 boats</option>
+        </select>
+        <span style="font-size:12px;color:var(--text-3)">${totalSeats} seats per boat</span>
+      ` : `<span class="badge" style="background:var(--accent-bg);color:var(--accent-text);font-size:12px">🛶 ${boatTypeLabel(boatType)} boat · ${totalSeats} seats${boatCount>1?' · '+boatCount+' boats':''}</span>`}
     </div>
+    ${boatCount>1 ? `<div id="lineup-boat-tabs" style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">
+      ${Array.from({length:boatCount},(_,i)=>i+1).map(b=>`<button class="btn btn-sm ${b===(window._currentBoat||1)?'btn-primary':'btn-ghost'}" onclick="switchLineupBoat('${evId}',${b})">🚣 Boat ${b}</button>`).join('')}
+    </div>` : ''}
     ${balPanel}
     <div class="boat-visual" style="margin-bottom:12px;padding:14px">
       <div style="text-align:center;margin-bottom:6px">
@@ -2040,11 +2059,17 @@ window.showUnavailPopup = function(dateStr, domEvent) {
 };
 
 
+// Returns the correct Firebase lineup path for the currently selected boat
+function lineupPath(evId) {
+  const boat = window._currentBoat || 1;
+  return boat > 1 ? 'lineups/'+evId+'_boat'+boat : 'lineups/'+evId;
+}
+
 window.evdPickSeat = function(evId, key) {
   if(!can.edit()) return;
   Promise.all([
     db.ref('users').get(),
-    db.ref('lineups/'+evId).get(),
+    db.ref(lineupPath(evId)).get(),
     db.ref('events/'+evId).get(),
     db.ref('availability').get(),
   ]).then(([uSnap, lSnap, evSnap, avSnap])=>{
@@ -2135,10 +2160,11 @@ window.evdPickSeatConfirm = function(evId, key, memberUid, awayReason) {
 
 window.evdAssignSeat = async function(evId, key, memberUid) {
   if(!can.edit()) return;
-  await db.ref('lineups/'+evId+'/'+key).set(memberUid);
+  const path = lineupPath(evId);
+  await db.ref(path+'/'+key).set(memberUid);
   closeModal();
   // Refresh the lineup tab on the event page
-  const lSnap = await db.ref('lineups/'+evId).get();
+  const lSnap = await db.ref(path).get();
   const newLineup = lSnap.val()||{};
   if(window._evPage) {
     window._evPage.lineup = newLineup;
@@ -2153,8 +2179,9 @@ window.evdAssignSeat = async function(evId, key, memberUid) {
 
 window.evdClrSeat = async function(evId, key) {
   if(!can.edit()) return;
-  await db.ref('lineups/'+evId+'/'+key).remove();
-  const lSnap = await db.ref('lineups/'+evId).get();
+  const path = lineupPath(evId);
+  await db.ref(path+'/'+key).remove();
+  const lSnap = await db.ref(path).get();
   const newLineup = lSnap.val()||{};
   if(window._evPage) {
     window._evPage.lineup = newLineup;
@@ -3276,10 +3303,12 @@ window.delEvent = async id => {
 window.delSeries = async groupId => {
   if (!can.edit()) return;
   if (!confirm('Delete ALL events in this recurring series? This cannot be undone.')) return;
-  const snap = await db.ref('events').orderByChild('recurGroup').equalTo(groupId).get();
-  if (!snap.exists()) return;
+  const snap = await db.ref('events').get();
+  const all = snap.val()||{};
+  const matching = Object.keys(all).filter(id => all[id].recurGroup === groupId);
+  if (!matching.length) return;
   const batch = {};
-  Object.keys(snap.val()).forEach(id => { batch['events/'+id]=null; batch['lineups/'+id]=null; });
+  matching.forEach(id => { batch['events/'+id]=null; batch['lineups/'+id]=null; });
   await db.ref().update(batch);
   showToast('Series deleted','🗑');
 };
@@ -4122,22 +4151,32 @@ function renderAnnouncementBanner() {
 function pgRaceDay() {
   const C = document.getElementById('pg-content');
   const A = document.getElementById('pg-actions');
+  C.innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading races…</div>';
   if (can.edit()) {
     const b=document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Add heat'; b.onclick=()=>openHeatModal(null,null); A.appendChild(b);
   }
-  db.ref('events').orderByChild('type').equalTo('Race').get().then(evSnap=>{
-    const races = Object.values(evSnap.val()||{}).sort((a,b)=>b.date.localeCompare(a.date));
+  // Simple full fetch + client-side filter (avoids needing a Firebase index on 'type')
+  db.ref('events').get().then(evSnap=>{
+    const races = Object.values(evSnap.val()||{})
+      .filter(e => e.type === 'Race')
+      .sort((a,b)=>a.date.localeCompare(b.date)); // chronological, earliest first
     if(!races.length){C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No races yet</div><div class="empty-sub">Add race events first, then manage heats and results here.</div></div></div>`;return;}
 
-    // Race selector
+    // Race selector — default to the next upcoming race, or the most recent past one if none upcoming
+    const todayStr = today();
+    const upcomingIdx = races.findIndex(r=>r.date>=todayStr);
+    const defaultIdx = upcomingIdx>=0 ? upcomingIdx : races.length-1;
+
     const sel=document.createElement('div'); sel.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap';
     sel.innerHTML=`<label style="font-size:14px;font-weight:700;color:var(--text-2)">Race:</label>
-      <select id="rd-race-sel" style="max-width:300px">${races.map(r=>`<option value="${r.id}">${esc(r.name)} — ${fmtDate(r.date)}</option>`).join('')}</select>`;
-    C.prepend(sel);
+      <select id="rd-race-sel" style="max-width:300px">${races.map((r,i)=>`<option value="${r.id}" ${i===defaultIdx?'selected':''}>${esc(r.name)} — ${fmtDate(r.date)}</option>`).join('')}</select>`;
     C.innerHTML='';
     C.appendChild(sel);
     document.getElementById('rd-race-sel').onchange=function(){loadRaceDayDetail(this.value);};
-    loadRaceDayDetail(races[0].id);
+    loadRaceDayDetail(races[defaultIdx].id);
+  }).catch(err => {
+    console.error('Race Day load error:', err);
+    C.innerHTML = `<div class="card" style="padding:24px;text-align:center"><div style="font-size:28px;margin-bottom:10px">🏆</div><div style="font-weight:700;margin-bottom:6px">Couldn't load races</div><div style="font-size:13px;color:var(--text-3);margin-bottom:16px">Check your connection and try again.</div><button class="btn btn-primary" onclick="pgRaceDay()">Retry</button></div>`;
   });
 }
 
@@ -5372,26 +5411,40 @@ window.removeCarpool = async function(evId, key) {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MULTI-BOAT LINEUP SUPPORT
+// MULTI-BOAT LINEUP SUPPORT — changeable directly from the event's Lineup tab
 // ═══════════════════════════════════════════════════════════════════════════════
-function renderBoatSelector(evId, currentBoat) {
-  return db.ref('settings/boatCount').get().then(snap => {
-    const boatCount = snap.val()||1;
-    if (boatCount <= 1) return '';
-    let html = '<div style="display:flex;gap:6px;margin-bottom:12px">';
-    for (let b=1; b<=boatCount; b++) {
-      html += `<button class="btn btn-sm ${b===currentBoat?'btn-primary':'btn-ghost'}" onclick="switchLineupBoat('${evId}',${b})">🚣 Boat ${b}</button>`;
-    }
-    html += '</div>';
-    return html;
-  });
-}
-
 window._currentBoat = 1;
+
+// Change boat type (10/20/24-person) for THIS event only — doesn't affect team default
+window.changeLineupBoatType = async function(evId, newType) {
+  if (!can.edit()) return;
+  await db.ref('events/'+evId+'/boatType').set(Number(newType));
+  if (window._evPage) window._evPage.ev.boatType = Number(newType);
+  showToast('Boat type updated for this event 🛶');
+  logChange('Changed boat type for event '+evId+' to '+newType+'-person');
+  const lineupKey = window._currentBoat>1 ? 'lineups/'+evId+'_boat'+window._currentBoat : 'lineups/'+evId;
+  const snap = await db.ref(lineupKey).get();
+  renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, snap.val()||{});
+};
+
+// Change number of boats for THIS event only
+window.changeLineupBoatCount = async function(evId, newCount) {
+  if (!can.edit()) return;
+  await db.ref('events/'+evId+'/boatCount').set(Number(newCount));
+  if (window._evPage) window._evPage.ev.boatCount = Number(newCount);
+  window._currentBoat = 1; // reset to boat 1 when count changes
+  showToast('Number of boats updated 🚣');
+  logChange('Changed boat count for event '+evId+' to '+newCount);
+  const snap = await db.ref('lineups/'+evId).get();
+  renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, snap.val()||{});
+};
+
+// Switch which boat's lineup is being edited (when boatCount > 1)
 window.switchLineupBoat = function(evId, boatNum) {
   window._currentBoat = boatNum;
   if (window._evPage) {
-    db.ref('lineups/'+evId+(boatNum>1?'_boat'+boatNum:'')).get().then(snap=>{
+    const lineupKey = boatNum>1 ? 'lineups/'+evId+'_boat'+boatNum : 'lineups/'+evId;
+    db.ref(lineupKey).get().then(snap=>{
       renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, snap.val()||{});
     });
   }
