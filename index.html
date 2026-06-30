@@ -5284,8 +5284,8 @@ if (_origSaveEvt) {
 const SECURE_FIREBASE_RULES = `{
   "rules": {
     "users": {
+      ".read": "auth != null",
       "$uid": {
-        ".read": "auth != null",
         ".write": "auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
       }
     },
@@ -5297,7 +5297,7 @@ const SECURE_FIREBASE_RULES = `{
         "rsvps": {
           "$uid": { ".write": "auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" }
         },
-        "guests": { ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" }
+        "guests": { ".write": "auth != null" }
       }
     },
     "lineups": {
@@ -5309,22 +5309,21 @@ const SECURE_FIREBASE_RULES = `{
       ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
     },
     "availability": {
+      ".read": "auth != null",
       "$uid": {
-        ".read": "auth != null",
         ".write": "auth.uid === $uid || root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
       }
     },
-    "profileMedia": { "$uid": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" } },
-    "profileNotes":  { "$uid": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" } },
+    "profileMedia": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
+    "profileNotes":  { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
     "debriefs":      { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
     "announcements": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
-    "messages": { ".read": "auth != null", ".write": "auth != null" },
-    "carpool":  { ".read": "auth != null", ".write": "auth != null" },
-    "settings": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" },
-    "changelog": { ".read": "root.child('users').child(auth.uid).child('role').val() === 'admin'", ".write": "auth != null" },
+    "messages":  { ".read": "auth != null", ".write": "auth != null" },
+    "carpool":   { ".read": "auth != null", ".write": "auth != null" },
+    "settings":  { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" },
+    "changelog": { ".read": "auth != null", ".write": "auth != null" },
     "raceHeats": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
-    ".read": false,
-    ".write": false
+    "$other": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" }
   }
 }`;
 
