@@ -4068,8 +4068,20 @@ window.saveSettings = async () => {
 };
 
 // ─── Mobile sidebar ────────────────────────────────────────────────────────────
-function openSidebar()  { document.getElementById('sidebar').classList.add('mob-open');    document.getElementById('mobOverlay').classList.add('open'); }
-function closeSidebar() { document.getElementById('sidebar').classList.remove('mob-open'); document.getElementById('mobOverlay').classList.remove('open'); }
+function openSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('mobOverlay');
+  sidebar.classList.add('mob-open');
+  overlay.classList.add('open');
+  sidebar.style.transform = 'translateX(0)';
+}
+function closeSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('mobOverlay');
+  sidebar.classList.remove('mob-open');
+  overlay.classList.remove('open');
+  sidebar.style.transform = 'translateX(-100%)';
+}
 document.addEventListener('keydown', e => { if(e.key==='Escape') closeModal(); });
 
 // ═══════════════════════════════════════════════════════════════════════════════
