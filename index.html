@@ -2356,24 +2356,21 @@ window.setBulkRsvp=async function(evId,memberUid,val,btn){
   else btn.classList.add('selected-none');
 };
 
-// ── Register service worker for offline caching ───────────────────────────────
-if('serviceWorker' in navigator) {
-  window.addEventListener('load', ()=>{
-    // Inline service worker as a blob since we're single-file
-    const swCode=`
-self.addEventListener('install',e=>e.waitUntil(
-  caches.open('otterchaos-v1').then(c=>c.addAll([location.pathname]))
-));
-self.addEventListener('fetch',e=>{
-  if(e.request.method!=='GET')return;
-  e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(res=>{
-    if(res.ok){const c=res.clone();caches.open('otterchaos-v1').then(ca=>ca.put(e.request,c));}
-    return res;
-  }).catch(()=>caches.match(location.pathname))));
-});`;
-    const blob=new Blob([swCode],{type:'application/javascript'});
-    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
-  });
+// ── Remove any previously-registered service worker / cache ──────────────────
+// An earlier version of this app registered a service worker for offline support.
+// That worker cached the page permanently with no update mechanism, which caused
+// it to keep serving old broken versions of the app forever after any update.
+// This block runs on every load and forcibly removes any such worker + cache so
+// the browser always fetches the current file fresh.
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(reg => reg.unregister());
+  }).catch(()=>{});
+}
+if ('caches' in window) {
+  caches.keys().then(names => {
+    names.forEach(name => caches.delete(name));
+  }).catch(()=>{});
 }
 
 // ── Paddle side balance in lineup ─────────────────────────────────────────────
