@@ -5533,6 +5533,36 @@ function medicalFlagBadge(member) {
 }
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
+// ── TEMPORARY DIAGNOSTIC — reports sidebar status, remove after debugging ──
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    const sb = document.getElementById('sidebar');
+    const diag = document.createElement('div');
+    diag.style.cssText = 'position:fixed;top:10px;right:10px;z-index:99999;background:#000;color:#0f0;font-family:monospace;font-size:11px;padding:10px;border-radius:6px;max-width:320px;white-space:pre-wrap;line-height:1.5';
+    if (!sb) {
+      diag.textContent = 'DIAGNOSTIC: #sidebar element NOT FOUND in DOM at all.';
+    } else {
+      const rect = sb.getBoundingClientRect();
+      const cs = window.getComputedStyle(sb);
+      diag.textContent = 'DIAGNOSTIC: #sidebar FOUND\n'
+        + 'width: ' + rect.width + 'px\n'
+        + 'height: ' + rect.height + 'px\n'
+        + 'left: ' + rect.left + 'px\n'
+        + 'top: ' + rect.top + 'px\n'
+        + 'display: ' + cs.display + '\n'
+        + 'visibility: ' + cs.visibility + '\n'
+        + 'opacity: ' + cs.opacity + '\n'
+        + 'position: ' + cs.position + '\n'
+        + 'z-index: ' + cs.zIndex + '\n'
+        + 'transform: ' + cs.transform + '\n'
+        + 'classes: ' + sb.className + '\n'
+        + 'parent: ' + (sb.parentElement ? sb.parentElement.className || sb.parentElement.id : 'none') + '\n'
+        + 'innerHTML length: ' + sb.innerHTML.length;
+    }
+    document.body.appendChild(diag);
+  }, 1500);
+});
+
 initApp();
 </script>
 </body>
