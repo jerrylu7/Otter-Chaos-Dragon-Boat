@@ -5200,9 +5200,15 @@ renderEvDetailLineup = function(evId, ev, members, lineup) {
 const _origRenderRsvp = renderEvDetailRsvp;
 renderEvDetailRsvp = function(evId, ev, members, lineup, uid) {
   _origRenderRsvp(evId, ev, members, lineup, uid);
-  // Add guest section
   const body = document.getElementById('ev-detail-body');
   if (!body) return;
+
+  // ── What are you bringing? (Social events only) ────────────────────────────
+  if (ev.type === 'Otter S.O.C.I.A.L') {
+    renderBringingSection(evId, uid);
+  }
+
+  // Add guest section
   const guests = Object.entries(ev.guests||{});
   const gSection = document.createElement('div');
   gSection.style.marginTop='16px';
@@ -5361,6 +5367,7 @@ const SECURE_FIREBASE_RULES = `{
     "announcements": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
     "messages":  { ".read": "auth != null", ".write": "auth != null" },
     "carpool":   { ".read": "auth != null", ".write": "auth != null" },
+    "bringing":  { ".read": "auth != null", ".write": "auth != null" },
     "settings":  { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" },
     "changelog": { ".read": "auth != null", ".write": "auth != null" },
     "raceHeats": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
@@ -5529,6 +5536,134 @@ function medicalFlagBadge(member) {
   if (!member.medicalNote || !can.edit()) return '';
   return `<span class="badge" style="background:var(--danger-bg);color:var(--danger-text);font-size:10px" title="${esc(member.medicalNote)}">🩹 Note</span>`;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WHAT ARE YOU BRINGING? (Social events only)
+// ═══════════════════════════════════════════════════════════════════════════════
+const BRINGING_CATEGORIES = [
+  { key: 'food',   icon: '🍽', label: 'Food' },
+  { key: 'drinks', icon: '🥤', label: 'Drinks' },
+  { key: 'games',  icon: '🎮', label: 'Games' },
+  { key: 'other',  icon: '📦', label: 'Other' },
+];
+
+function renderBringingSection(evId, uid) {
+  const body = document.getElementById('ev-detail-body'); if (!body) return;
+  db.ref('bringing/'+evId).get().then(snap => {
+    const entries = snap.val()||{};
+    const myEntry = Object.entries(entries).find(([,b])=>b.uid===uid);
+    const myKey   = myEntry?.[0];
+    const my      = myEntry?.[1];
+
+    // Group entries by category
+    const byCategory = {};
+    BRINGING_CATEGORIES.forEach(c=>{ byCategory[c.key]=[]; });
+    Object.entries(entries).forEach(([key,b])=>{
+      if (byCategory[b.category] !== undefined) byCategory[b.category].push({...b,key});
+    });
+
+    const existing = document.getElementById('bringing-section');
+    const section  = existing || document.createElement('div');
+    section.id     = 'bringing-section';
+    section.style.cssText = 'margin-top:16px';
+
+    section.innerHTML = `
+      <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
+        🎉 What's everyone bringing?
+      </div>
+
+      ${BRINGING_CATEGORIES.map(cat=>{
+        const items = byCategory[cat.key]||[];
+        return `<div style="margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--text-2);margin-bottom:5px">${cat.icon} ${cat.label}</div>
+          <div>
+            ${items.length ? items.map(b=>`
+              <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
+                <div class="avatar" style="width:22px;height:22px;font-size:9px;flex-shrink:0">${initials(b.name)}</div>
+                <div style="flex:1;min-width:0">
+                  <span style="font-size:13px;font-weight:600">${esc(b.name)}</span>
+                  ${b.note?`<span style="font-size:12px;color:var(--text-3)"> — ${esc(b.note)}</span>`:''}
+                </div>
+                ${b.uid===uid?`<button onclick="removeBringing('${evId}','${b.key}')" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:14px;padding:0 4px;flex-shrink:0" title="Remove">✕</button>`:''}
+              </div>`).join('')
+            : `<div style="font-size:12px;color:var(--text-3);font-style:italic">Nothing yet</div>`}
+          </div>
+        </div>`;
+      }).join('')}
+
+      ${!myEntry ? `
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">I'm bringing…</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+            ${BRINGING_CATEGORIES.map(cat=>`
+              <button id="bring-cat-${cat.key}" onclick="selectBringingCategory('${cat.key}')"
+                class="btn btn-sm btn-ghost" style="gap:4px">
+                ${cat.icon} ${cat.label}
+              </button>`).join('')}
+          </div>
+          <input id="bring-note" placeholder="Add a note, e.g. 'potato salad', 'Jenga'…"
+            style="margin-bottom:8px;font-size:13px" oninput="updateBringingNote(this.value)">
+          <button class="btn btn-sm btn-primary" onclick="submitBringing('${evId}','${uid}')">Add</button>
+          <div id="bring-note-preview" style="font-size:12px;color:var(--text-3);margin-top:4px"></div>
+        </div>` : `
+        <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--text-3)">
+          ✓ You're bringing ${BRINGING_CATEGORIES.find(c=>c.key===my.category)?.icon||''} <strong>${BRINGING_CATEGORIES.find(c=>c.key===my.category)?.label||my.category}</strong>${my.note?' — '+esc(my.note):''}
+          <button onclick="removeBringing('${evId}','${myKey}')" class="btn btn-sm btn-ghost" style="margin-left:8px;color:var(--danger-text)">Change</button>
+        </div>`}
+    `;
+
+    if (!existing) body.appendChild(section);
+  });
+}
+
+// Track selected category in memory between renders
+window._selectedBringingCategory = null;
+
+window.selectBringingCategory = function(cat) {
+  window._selectedBringingCategory = cat;
+  BRINGING_CATEGORIES.forEach(c => {
+    const btn = document.getElementById('bring-cat-'+c.key);
+    if (!btn) return;
+    btn.classList.toggle('btn-primary', c.key===cat);
+    btn.classList.toggle('btn-ghost',   c.key!==cat);
+  });
+  const note = document.getElementById('bring-note');
+  const preview = document.getElementById('bring-note-preview');
+  const icon = BRINGING_CATEGORIES.find(c=>c.key===cat)?.icon||'';
+  const label = BRINGING_CATEGORIES.find(c=>c.key===cat)?.label||cat;
+  if (preview) preview.textContent = `Selected: ${icon} ${label}${note?.value?' — '+note.value:''}`;
+};
+
+window.updateBringingNote = function(val) {
+  const preview = document.getElementById('bring-note-preview');
+  if (!preview||!window._selectedBringingCategory) return;
+  const cat = BRINGING_CATEGORIES.find(c=>c.key===window._selectedBringingCategory);
+  if (preview && cat) preview.textContent = `Selected: ${cat.icon} ${cat.label}${val?' — '+val:''}`;
+};
+
+window.submitBringing = async function(evId, uid) {
+  const cat = window._selectedBringingCategory;
+  if (!cat) { showToast('Please select a category first','⚠️'); return; }
+  const note = document.getElementById('bring-note')?.value?.trim()||'';
+  const key = db.ref('bringing/'+evId).push().key;
+  await db.ref('bringing/'+evId+'/'+key).set({
+    uid,
+    name: currentProfile.name,
+    category: cat,
+    note,
+    ts: Date.now(),
+  });
+  window._selectedBringingCategory = null;
+  showToast('Added! 🎉');
+  renderBringingSection(evId, uid);
+};
+
+window.removeBringing = async function(evId, key) {
+  await db.ref('bringing/'+evId+'/'+key).remove();
+  showToast('Removed','🗑');
+  const uid = currentUser.uid;
+  renderBringingSection(evId, uid);
+};
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
 initApp();
