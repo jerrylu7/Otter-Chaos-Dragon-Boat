@@ -42,6 +42,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-functions-compat.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 
 <!-- ============================================================
@@ -2761,7 +2762,7 @@ function pgProfile() {
             </div>
             <div>
               <div class="form-group"><label class="form-label">Paddle sides</label><div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">${['Left','Right','Both'].map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-side-${s.toLowerCase()}" ${sides.includes(s)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${s}</label>`).join('')}</div></div>
-              <div class="form-group"><label class="form-label">Boat positions</label><div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">${['Paddler','Drummer','Steers'].map(pos=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-pos-${pos.toLowerCase()}" ${roles.includes(pos)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`).join('')}</div></div>
+              <div class="form-group"><label class="form-label">Boat positions</label><div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">${['Paddler','Caller','Drummer','Steers'].map(pos=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-pos-${pos.toLowerCase()}" ${roles.includes(pos)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`).join('')}</div></div>
             </div>
           </div>
           <button class="btn btn-primary" style="margin-top:8px" onclick="saveProfile()">Save changes</button>
@@ -2826,7 +2827,7 @@ window.deleteNote = async function(memberUid, key) {
 
 window.saveProfile = async function() {
   const uid=currentUser.uid;
-  const updates={ weight:document.getElementById('pf-weight').value, sides:['Left','Right','Both'].filter(s=>document.getElementById('pf-side-'+s.toLowerCase())?.checked), paddlerRoles:['Paddler','Drummer','Steers'].filter(p=>document.getElementById('pf-pos-'+p.toLowerCase())?.checked), emergency:document.getElementById('pf-emerg').value.trim() };
+  const updates={ weight:document.getElementById('pf-weight').value, sides:['Left','Right','Both'].filter(s=>document.getElementById('pf-side-'+s.toLowerCase())?.checked), paddlerRoles:['Paddler','Caller','Drummer','Steers'].filter(p=>document.getElementById('pf-pos-'+p.toLowerCase())?.checked), emergency:document.getElementById('pf-emerg').value.trim() };
   await db.ref('users/'+uid).update(updates);
   const snap=await db.ref('users/'+uid).get();
   currentProfile=snap.val();
@@ -3134,7 +3135,7 @@ function openMemberModal(mJson) {
         <div class="form-group" style="margin:0">
           <label class="form-label">Boat positions</label>
           <div style="display:flex;flex-direction:column;gap:6px;padding:8px 0">
-            ${['Paddler','Drummer','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddlerRoles)?m.paddlerRoles:m?.paddlerRole?[m.paddlerRole]:['Paddler']).includes(pos);return `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="mf-pos-${pos.toLowerCase()}" ${checked?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`;}).join('')}
+            ${['Paddler','Caller','Drummer','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddlerRoles)?m.paddlerRoles:m?.paddlerRole?[m.paddlerRole]:['Paddler']).includes(pos);return `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="mf-pos-${pos.toLowerCase()}" ${checked?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`;}).join('')}
           </div>
         </div>
       </div>
@@ -3153,7 +3154,7 @@ window.saveMember = async (uidArg, isNew) => {
   const updates = {
     role:         document.getElementById('mf-role').value,
     sides:        ['Left','Right','Both'].filter(s=>document.getElementById('mf-side-'+s.toLowerCase())?.checked),
-    paddlerRoles: ['Paddler','Drummer','Steers'].filter(p=>document.getElementById('mf-pos-'+p.toLowerCase())?.checked),
+    paddlerRoles: ['Paddler','Caller','Drummer','Steers'].filter(p=>document.getElementById('mf-pos-'+p.toLowerCase())?.checked),
     weight:       document.getElementById('mf-weight').value,
     emergency:    document.getElementById('mf-emerg').value.trim(),
   };
@@ -3941,7 +3942,19 @@ function pgApprovals() {
   });
 }
 window.approveU = async uid => { const role=document.getElementById('rs-'+uid)?.value||'paddler'; await db.ref('users/'+uid).update({approved:true,role}); showToast('Member approved','✓'); };
-window.rejectU  = async uid => { if(!confirm('Delete this request?'))return; await db.ref('users/'+uid).remove(); showToast('Request rejected','🗑'); };
+window.rejectU = async uid => {
+  if (!confirm('Delete this request? The user will be able to re-register with the same email.')) return;
+  try {
+    // Delete the Firebase Auth account so the user can re-register with the same email
+    const fn = firebase.functions().httpsCallable('deleteAuthUser');
+    await fn({ uid });
+  } catch(e) {
+    // Auth deletion failed — warn but still remove from database
+    console.warn('Could not delete auth account:', e.message);
+  }
+  await db.ref('users/'+uid).remove();
+  showToast('Request rejected','🗑');
+};
 window.chgRole  = async uid => {
   const role=document.getElementById('rc-'+uid)?.value; if(!role)return;
   await db.ref('users/'+uid+'/role').set(role);
