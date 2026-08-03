@@ -66,7 +66,7 @@ const APP_URL = "https://jerrylu7.github.io/Otter-Chaos-Dragon-Boat/";
 // ── Push notification VAPID public key ────────────────────────────────────────
 // Replace this with your actual VAPID public key after running Step 5 of the
 // push notification setup guide (PUSH_SETUP_GUIDE.md).
-const VAPID_PUBLIC_KEY = "BD-WLdIoOeLU25Lm3HrhYGfQXgV36vCdaSj8ikPRGh_9xnRwoqyhkzqbH7yPlliHoHiWmtqL42TeGWP6Jb7DMQw";
+const VAPID_PUBLIC_KEY = 'PASTE_YOUR_VAPID_PUBLIC_KEY_HERE';
 
 // EmailJS — free auto-email service. Sign up at emailjs.com, create a service
 // and template, then paste your IDs here to enable automatic reminders.
@@ -1128,7 +1128,21 @@ function bootApp() {
   });
   // Auto-send reminders for practices 2 days out (runs once on boot for admins/coaches)
   if (can.edit()) checkAndSendAutoReminders();
-  navigate('dashboard');
+
+  // ── Profile completion gate ────────────────────────────────────────────────
+  // New members must fill in weight, side, and emergency contact before
+  // accessing the rest of the app.
+  const p = currentProfile;
+  const sidesOk = Array.isArray(p.sides) && p.sides.length > 0;
+  const weightOk = p.weight && String(p.weight).trim() !== '';
+  const emergOk  = p.emergency && String(p.emergency).trim() !== '';
+  const profileComplete = sidesOk && weightOk && emergOk;
+
+  if (!profileComplete && p.role !== 'admin') {
+    showProfileCompletionScreen();
+  } else {
+    navigate('dashboard');
+  }
 }
 
 // ─── Auto-reminder engine ─────────────────────────────────────────────────────
@@ -1158,7 +1172,10 @@ async function checkAndSendAutoReminders() {
     const sentKey = `${ev.id}_${todayStr}`.replace(/[.#$[\]]/g,'_');
     if (sentLog[sentKey]) continue;
 
-    const needsRsvp = allUsers.filter(m => !(ev.rsvps||{})[m.uid]);
+    const needsRsvp = allUsers.filter(m => {
+      const rsvp = (ev.rsvps||{})[m.uid];
+      return !rsvp; // only send to members who haven't replied at all (excludes 'yes' AND 'no')
+    });
     for (const member of needsRsvp) {
       try {
         await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
@@ -5704,6 +5721,104 @@ window.removeBringing = async function(evId, key) {
   showToast('Removed','🗑');
   const uid = currentUser.uid;
   renderBringingSection(evId, uid);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PROFILE COMPLETION GATE
+// Shown to new members on first login before they can access the app.
+// ═══════════════════════════════════════════════════════════════════════════════
+function showProfileCompletionScreen() {
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('auth-screen').style.display = 'none';
+
+  const content = document.getElementById('content');
+  content.innerHTML = `
+    <div style="max-width:480px;margin:48px auto;padding:0 16px">
+      <div class="card" style="padding:28px">
+        <div style="text-align:center;margin-bottom:24px">
+          <div style="font-size:36px;margin-bottom:8px">🚣</div>
+          <h2 style="font-size:20px;font-weight:700;margin-bottom:6px">Welcome to the team!</h2>
+          <p style="font-size:14px;color:var(--text-2)">Please fill in a few details before you get started. Your coach uses this to build safe, balanced lineups.</p>
+        </div>
+
+        <div id="profile-gate-msg" style="display:none;margin-bottom:16px"></div>
+
+        <div style="margin-bottom:18px">
+          <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">
+            Paddle side <span style="color:var(--danger-text)">*</span>
+          </label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            ${['Left','Right','Both'].map(s=>`
+              <label style="display:flex;align-items:center;gap:6px;font-size:14px;cursor:pointer;padding:8px 14px;border:1.5px solid var(--border);border-radius:var(--radius);flex:1;min-width:80px;justify-content:center" id="gate-side-label-${s.toLowerCase()}">
+                <input type="checkbox" id="gate-side-${s.toLowerCase()}" onchange="gateUpdateSideLabel('${s.toLowerCase()}')"> ${s}
+              </label>`).join('')}
+          </div>
+        </div>
+
+        <div style="margin-bottom:18px">
+          <label for="gate-weight" style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">
+            Weight (lbs) <span style="color:var(--danger-text)">*</span>
+          </label>
+          <input id="gate-weight" type="number" min="50" max="400" placeholder="e.g. 155" style="font-size:15px">
+        </div>
+
+        <div style="margin-bottom:24px">
+          <label for="gate-emergency" style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">
+            Emergency contact <span style="color:var(--danger-text)">*</span>
+          </label>
+          <input id="gate-emergency" type="text" placeholder="Name & phone number, e.g. Jane Lu — 604-555-0123" style="font-size:14px">
+          <div style="font-size:11px;color:var(--text-3);margin-top:4px">Only visible to coaches and admins</div>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%;font-size:15px;padding:13px" onclick="saveProfileGate()">
+          Save and continue →
+        </button>
+      </div>
+    </div>`;
+}
+
+window.gateUpdateSideLabel = function(side) {
+  const checked = document.getElementById('gate-side-'+side)?.checked;
+  const label = document.getElementById('gate-side-label-'+side);
+  if (label) {
+    label.style.borderColor = checked ? 'var(--accent)' : 'var(--border)';
+    label.style.background  = checked ? 'var(--accent-bg)' : '';
+    label.style.color       = checked ? 'var(--accent-text)' : '';
+    label.style.fontWeight  = checked ? '700' : '';
+  }
+};
+
+window.saveProfileGate = async function() {
+  const sides   = ['Left','Right','Both'].filter(s=>document.getElementById('gate-side-'+s.toLowerCase())?.checked);
+  const weight  = document.getElementById('gate-weight')?.value?.trim();
+  const emerg   = document.getElementById('gate-emergency')?.value?.trim();
+
+  const msgEl = document.getElementById('profile-gate-msg');
+  function gateErr(msg) {
+    msgEl.style.display = '';
+    msgEl.className = 'msg msg-warn';
+    msgEl.textContent = msg;
+  }
+
+  if (!sides.length)  { gateErr('Please select at least one paddle side.'); return; }
+  if (!weight)        { gateErr('Please enter your weight.'); return; }
+  if (Number(weight) < 50 || Number(weight) > 400) { gateErr('Please enter a valid weight between 50 and 400 lbs.'); return; }
+  if (!emerg)         { gateErr('Please enter an emergency contact name and phone number.'); return; }
+
+  const btn = document.querySelector('#content .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    await db.ref('users/'+currentUser.uid).update({ sides, weight, emergency: emerg });
+    // Update currentProfile in memory so the gate check won't re-trigger
+    currentProfile.sides     = sides;
+    currentProfile.weight    = weight;
+    currentProfile.emergency = emerg;
+    navigate('dashboard');
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save and continue →'; }
+    gateErr('Could not save — please try again.');
+  }
 };
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
