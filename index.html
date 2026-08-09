@@ -602,9 +602,33 @@ hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
   .auth-tabs { margin-bottom: 16px; }
 
   /* Dashboard — tighter greeting and stats */
-  .dash-welcome { margin-bottom: 10px; }
-  .dash-welcome .greeting { font-size: 18px; }
-  .dash-welcome .greeting-sub { font-size: 12px; }
+  .dash-welcome { margin-bottom: 8px; }
+  .dash-welcome .greeting { font-size: 17px; }
+  .dash-welcome .sub { font-size: 12px; margin-top: 2px; }
+
+  /* Stats — force 2x2 so tiles never overflow horizontally */
+  .dash-stats { grid-template-columns: repeat(2, 1fr) !important; gap: 6px; margin-bottom: 8px; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 8px; }
+  .dash-stat { padding: 8px 10px; }
+  .dash-stat-val { font-size: 20px; }
+  .dash-stat-label { font-size: 9px; }
+  .metric { padding: 8px 10px; }
+  .metric-value { font-size: 20px; }
+  .metric-label { font-size: 9px; }
+
+  /* Calendar — squeeze to fit all 7 columns */
+  .cal-header { padding: 6px 8px; }
+  .cal-title { font-size: 13px; }
+  .cal-nav { padding: 4px 6px; font-size: 13px; }
+  .cal-day { min-height: 42px; padding: 2px 1px; }
+  .cal-day-num { font-size: 9px; line-height: 16px; }
+  .cal-event-dot { font-size: 7px; padding: 1px 2px; border-radius: 2px; margin-top: 1px; }
+  .cal-dow { font-size: 7px; padding: 3px 0; letter-spacing: 0; }
+  .cal-legend { gap: 4px; padding: 4px 8px; flex-wrap: wrap; }
+  .cal-legend-item { font-size: 9px; }
+
+  /* Section titles */
+  .dash-section-title { font-size: 10px; margin: 8px 0 5px; }
 
 /* ── Very small phones (iPhone SE, etc.) ── */
 @media (max-width: 390px) {
