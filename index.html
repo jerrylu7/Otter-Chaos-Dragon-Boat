@@ -913,7 +913,8 @@ const can = {
 };
 const esc   = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const genUid = p  => (p||'id')+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
-const today = () => new Date().toISOString().slice(0,10);
+// Returns today's date as YYYY-MM-DD in Vancouver (Pacific) local time
+const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Vancouver' });
 const initials = n => String(n||'').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
 const fmtDate  = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric',year:'numeric'}) : '';
 const fmtDateS = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-CA',{month:'short',day:'numeric'}) : '';
@@ -1151,9 +1152,9 @@ async function checkAndSendAutoReminders() {
   if (!EMAILJS_PUBLIC_KEY || EMAILJS_PUBLIC_KEY.startsWith('YOUR_')) return; // EmailJS not configured
 
   const now = new Date();
-  const twoDaysFromNow = new Date(now); twoDaysFromNow.setDate(twoDaysFromNow.getDate() + 2);
-  const twoDaysStr = twoDaysFromNow.toISOString().slice(0,10);
-  const todayStr   = now.toISOString().slice(0,10);
+  // Use Vancouver local date to avoid UTC rollover causing reminders to fire a day early
+  const twoDaysStr = new Date(now.getTime() + 2 * 86400000).toLocaleDateString('en-CA', { timeZone: 'America/Vancouver' });
+  const todayStr   = now.toLocaleDateString('en-CA', { timeZone: 'America/Vancouver' });
 
   const [evSnap, uSnap, tnSnap, sentSnap] = await Promise.all([
     db.ref('events').orderByChild('date').equalTo(twoDaysStr).get(),
