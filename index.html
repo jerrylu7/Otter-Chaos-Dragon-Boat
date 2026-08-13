@@ -1108,8 +1108,8 @@ function buildSidebar() {
   // ── Member-facing pages (visible to all) ──
   const memberPages = [
     { id:'dashboard', icon:'🏠', label:'Dashboard',  badge:'dash-badge' },
-    { id:'races',     icon:'🏁', label:'Races' },
     { id:'practices', icon:'🚣', label:'Practices' },
+    { id:'races',     icon:'🏁', label:'Races' },
     { id:'socials',   icon:'🦦', label:'Otter S.O.C.I.A.L' },
     { id:'raceday',   icon:'🏆', label:'Race Day' },
     { id:'roster',    icon:'👥', label:'Roster' },
@@ -1119,9 +1119,7 @@ function buildSidebar() {
   const adminPages = [
     { id:'announcements', icon:'📣', label:'Announcements',  badge:'ann-badge' },
     { id:'lineup',        icon:'📋', label:'Lineup' },
-    { id:'attendance',    icon:'✅', label:'Attendance' },
-    { id:'leaderboard',   icon:'🏅', label:'Leaderboard' },
-    { id:'season',        icon:'📊', label:'Season Summary' },
+    { id:'attendance',    icon:'📊', label:'Stats & Records' },
     { id:'messaging',     icon:'💬', label:'Messages',       badge:'msg-badge' },
     { id:'changelog',     icon:'📜', label:'Change log',     adminOnly:true },
     { id:'bulkevent',     icon:'📆', label:'Bulk events',    editOnly:true },
@@ -1885,7 +1883,7 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
   ${Math.abs(bal.lCount-bal.rCount)>1?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--warning-text);margin-bottom:8px">⚖️ Side imbalance: ${Math.abs(bal.lCount-bal.rCount)} more ${bal.lCount>bal.rCount?'left':'right'}-side paddlers</div>`:''}
   ${bal.wImbalance>10?`<div style="background:var(--warning-bg);border:1px solid var(--warning);border-radius:var(--radius);padding:8px 12px;font-size:12px;color:var(--warning-text);margin-bottom:10px">⚖️ Weight imbalance: ${bal.wImbalance} lbs between sides</div>`:''}` : '';
 
-  const totalSeats = ROWS*2 + 2; // +drummer +steers
+  const totalSeats = ROWS*2 + 4; // 2 callers + 2 steers
   body.innerHTML = `
     ${!ed?'<div class="readonly-notice" style="margin-bottom:12px">👁 View only — coaches and admins can edit the lineup.</div>':''}
     <div id="lineup-boat-config" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
@@ -1909,8 +1907,11 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
     ${balPanel}
     <div class="boat-visual" style="margin-bottom:12px;padding:14px">
       <div style="text-align:center;margin-bottom:6px">
-        <div class="boat-section-title" style="font-size:13px;margin-bottom:4px">🥁 Drummer</div>
-        <div style="display:flex;justify-content:center">${seatEl('drummer','Drummer')}</div>
+        <div class="boat-section-title" style="font-size:13px;margin-bottom:6px">📣 Callers</div>
+        <div style="display:flex;justify-content:center;gap:8px">
+          ${seatEl('caller1','Caller 1')}
+          ${seatEl('caller2','Caller 2')}
+        </div>
       </div>
       <hr style="margin:10px 0">
       <div style="display:grid;grid-template-columns:1fr 28px 1fr;gap:4px;margin-bottom:4px;font-size:10px;font-weight:700;color:var(--text-3);text-align:center;text-transform:uppercase">
@@ -1919,8 +1920,11 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
       <div style="display:grid;grid-template-columns:1fr 28px 1fr;gap:5px 4px;align-items:center">${rows}</div>
       <hr style="margin:10px 0">
       <div style="text-align:center;margin-top:6px">
-        <div class="boat-section-title" style="font-size:13px;margin-bottom:4px">🎯 Steers</div>
-        <div style="display:flex;justify-content:center">${seatEl('steers','Steers')}</div>
+        <div class="boat-section-title" style="font-size:13px;margin-bottom:6px">🎯 Steers</div>
+        <div style="display:flex;justify-content:center;gap:8px">
+          ${seatEl('steers1','Steers 1')}
+          ${seatEl('steers2','Steers 2')}
+        </div>
       </div>
     </div>`;
 }
@@ -2070,9 +2074,15 @@ window.evdPickSeat = function(evId, key) {
         </div>
         <input type="text" id="seat-q2" placeholder="Search member…" style="margin-bottom:12px" oninput="filterSeats(this.value)">
         <div id="seat-list">
-          ${avail.length ? avail.map(m=>{
+          ${avail.length ? avail.sort((a,b)=>{
+            const aYes = (ev.rsvps||{})[a.uid]==='yes';
+            const bYes = (ev.rsvps||{})[b.uid]==='yes';
+            if (aYes && !bYes) return -1;
+            if (!aYes && bYes) return 1;
+            return a.name.localeCompare(b.name);
+          }).map(m=>{
             const sides=Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
-            const match=sides.some(s=>key.includes(s.toLowerCase()));
+            const match=sides.includes('Both')||sides.some(s=>key.includes(s.toLowerCase()));
             const awayReason=isAway(m.uid);
             return `<div class="rsvp-row" style="cursor:pointer;${awayReason?'background:var(--warning-bg);':''}" onclick="evdPickSeatConfirm('${evId}','${key}','${m.uid}','${awayReason?(awayReason.replace(/\\/g,'\\\\').replace(/'/g,"\\'")):''}')">
               <div class="avatar" style="${awayReason?'background:var(--warning-bg);color:var(--warning-text)':''}">${initials(m.name)}</div>
@@ -2663,7 +2673,7 @@ function pgProfile() {
             </div>
             <div>
               <div class="form-group"><label class="form-label">Paddle sides</label><div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">${['Left','Right','Both'].map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-side-${s.toLowerCase()}" ${sides.includes(s)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${s}</label>`).join('')}</div></div>
-              <div class="form-group"><label class="form-label">Boat positions</label><div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">${['Paddler','Caller','Drummer','Steers'].map(pos=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-pos-${pos.toLowerCase()}" ${roles.includes(pos)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`).join('')}</div></div>
+              <div class="form-group"><label class="form-label">Boat positions</label><div style="display:flex;flex-direction:column;gap:6px;padding:4px 0">${['Paddler','Caller','Steers'].map(pos=>`<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="pf-pos-${pos.toLowerCase()}" ${roles.includes(pos)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`).join('')}</div></div>
             </div>
           </div>
           <button class="btn btn-primary" style="margin-top:8px" onclick="saveProfile()">Save changes</button>
@@ -2728,7 +2738,7 @@ window.deleteNote = async function(memberUid, key) {
 
 window.saveProfile = async function() {
   const uid=currentUser.uid;
-  const updates={ weight:document.getElementById('pf-weight').value, sides:['Left','Right','Both'].filter(s=>document.getElementById('pf-side-'+s.toLowerCase())?.checked), paddlerRoles:['Paddler','Caller','Drummer','Steers'].filter(p=>document.getElementById('pf-pos-'+p.toLowerCase())?.checked), emergency:document.getElementById('pf-emerg').value.trim() };
+  const updates={ weight:document.getElementById('pf-weight').value, sides:['Left','Right','Both'].filter(s=>document.getElementById('pf-side-'+s.toLowerCase())?.checked), paddlerRoles:['Paddler','Caller','Steers'].filter(p=>document.getElementById('pf-pos-'+p.toLowerCase())?.checked), emergency:document.getElementById('pf-emerg').value.trim() };
   await db.ref('users/'+uid).update(updates);
   const snap=await db.ref('users/'+uid).get();
   currentProfile=snap.val();
@@ -3036,7 +3046,7 @@ function openMemberModal(mJson) {
         <div class="form-group" style="margin:0">
           <label class="form-label">Boat positions</label>
           <div style="display:flex;flex-direction:column;gap:6px;padding:8px 0">
-            ${['Paddler','Caller','Drummer','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddlerRoles)?m.paddlerRoles:m?.paddlerRole?[m.paddlerRole]:['Paddler']).includes(pos);return `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="mf-pos-${pos.toLowerCase()}" ${checked?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`;}).join('')}
+            ${['Paddler','Caller','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddlerRoles)?m.paddlerRoles:m?.paddlerRole?[m.paddlerRole]:['Paddler']).includes(pos);return `<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="mf-pos-${pos.toLowerCase()}" ${checked?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> ${pos}</label>`;}).join('')}
           </div>
         </div>
       </div>
@@ -3055,7 +3065,7 @@ window.saveMember = async (uidArg, isNew) => {
   const updates = {
     role:         document.getElementById('mf-role').value,
     sides:        ['Left','Right','Both'].filter(s=>document.getElementById('mf-side-'+s.toLowerCase())?.checked),
-    paddlerRoles: ['Paddler','Caller','Drummer','Steers'].filter(p=>document.getElementById('mf-pos-'+p.toLowerCase())?.checked),
+    paddlerRoles: ['Paddler','Caller','Steers'].filter(p=>document.getElementById('mf-pos-'+p.toLowerCase())?.checked),
     weight:       document.getElementById('mf-weight').value,
     emergency:    document.getElementById('mf-emerg').value.trim(),
   };
@@ -3194,11 +3204,14 @@ window.pickSeat = function(evId, key) {
         <div class="modal-body" style="padding:12px 24px">
           <input type="text" id="seat-q" placeholder="Search member…" style="margin-bottom:12px" oninput="filterSeats(this.value)">
           <div id="seat-list">
-            ${avail.length ? avail.map(m=>`<div class="rsvp-row" style="cursor:pointer" onclick="assignSeat('${evId}','${key}','${m.uid}')">
+            ${avail.length ? avail.sort((a,b)=>a.name.localeCompare(b.name)).map(m=>{
+              const mSides = Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
+              const sideMatch = mSides.includes('Both')||mSides.some(s=>key.includes(s.toLowerCase()));
+              return `<div class="rsvp-row" style="cursor:pointer" onclick="assignSeat('${evId}','${key}','${m.uid}')">
               <div class="avatar">${initials(m.name)}</div>
-              <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler']).join(', '))} · ${esc((Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).join('/'))||'—'} side · ${m.weight?m.weight+' lbs':'?'}</div></div>
-              ${(Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).some(s=>key.includes(s.toLowerCase()))?'<span class="badge badge-yes">✓ side match</span>':''}
-            </div>`).join('') : '<p style="color:var(--text-3);font-size:13px;padding:8px 0">All members assigned.</p>'}
+              <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler']).join(', '))} · ${esc(mSides.join('/'))||'—'} side · ${m.weight?m.weight+' lbs':'?'}</div></div>
+              ${sideMatch?'<span class="badge badge-yes">✓ side match</span>':''}
+            </div>`;}).join('') : '<p style="color:var(--text-3);font-size:13px;padding:8px 0">All members assigned.</p>'}
           </div>
           ${lineup[key]?`<hr><button class="btn btn-danger btn-sm" onclick="clrSeat('${evId}','${key}');closeModal()">Remove current assignment</button>`:''}
         </div>
@@ -3518,6 +3531,22 @@ window.toggleAttendance = async function(evId, memberUid, nextVal, btn) {
 function pgAttendance() {
   if (!can.view()) { navigate('dashboard'); return; }
   const C = document.getElementById('pg-content');
+  const activeTab = window._statsTab || 'attendance';
+  C.innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap">
+      <button class="btn btn-sm ${activeTab==='attendance'?'btn-primary':'btn-ghost'}" onclick="window._statsTab='attendance';pgAttendance()">✅ Attendance</button>
+      <button class="btn btn-sm ${activeTab==='leaderboard'?'btn-primary':'btn-ghost'}" onclick="window._statsTab='leaderboard';pgAttendance()">🏅 Leaderboard</button>
+      <button class="btn btn-sm ${activeTab==='season'?'btn-primary':'btn-ghost'}" onclick="window._statsTab='season';pgAttendance()">📊 Season Summary</button>
+    </div>
+    <div id="stats-tab-body"></div>`;
+  if (activeTab === 'attendance') _pgAttendanceBody();
+  else if (activeTab === 'leaderboard') { window._statsTab='leaderboard'; pgLeaderboard(); }
+  else { window._statsTab='season'; pgSeasonSummary(); }
+}
+
+function _pgAttendanceBody() {
+  if (!can.view()) return;
+  const C = document.getElementById('stats-tab-body');
 
   Promise.all([db.ref('users').get(), db.ref('events').get()]).then(([uSnap,evSnap]) => {
     const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
@@ -4353,7 +4382,14 @@ window.deleteAvailabilityFromProfile=async function(uid,key){
 // LEADERBOARD
 // ═══════════════════════════════════════════════════════════════════════════════
 function pgLeaderboard() {
-  const C=document.getElementById('pg-content');
+  const isSubTab = window._statsTab === 'leaderboard';
+  const C = isSubTab ? document.getElementById('stats-tab-body') : document.getElementById('pg-content');
+  if (!isSubTab) {
+    // Standalone nav — show sub-tab wrapper first
+    window._statsTab = 'leaderboard';
+    pgAttendance();
+    return;
+  }
   const uid=currentUser.uid;
   Promise.all([db.ref('users').get(),db.ref('events').get()]).then(([uSnap,evSnap])=>{
     const members=Object.values(uSnap.val()||{}).filter(u=>u.approved);
@@ -4439,7 +4475,13 @@ function pgLeaderboard() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function pgSeasonSummary() {
   if(!can.view()){navigate('dashboard');return;}
-  const C=document.getElementById('pg-content');
+  const isSubTab = window._statsTab === 'season';
+  const C = isSubTab ? document.getElementById('stats-tab-body') : document.getElementById('pg-content');
+  if (!isSubTab) {
+    window._statsTab = 'season';
+    pgAttendance();
+    return;
+  }
   const A=document.getElementById('pg-actions');
 
   // PDF export button for admins/coaches
@@ -5195,8 +5237,8 @@ renderEvDetailRsvp = function(evId, ev, members, lineup, uid) {
     ${can.edit()?`<button class="btn btn-sm btn-ghost" style="margin-top:8px" onclick="addGuestRsvp('${evId}')">＋ Add guest</button>`:''}
   </div>`;
   body.appendChild(gSection);
-  // Add carpool section
-  renderCarpoolSection(evId);
+  // Add carpool section — not shown for practices
+  if (ev.type !== 'Practice') renderCarpoolSection(evId);
 };
 
 // Wire up push notifications prompt in settings
