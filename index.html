@@ -1835,6 +1835,24 @@ function renderEvDetailLineup(evId, ev, members, lineup) {
 function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType, boatCount) {
   const goingUids = new Set(Object.entries(ev.rsvps||{}).filter(([,v])=>v==='yes').map(([k])=>k));
 
+  // ── Migrate old seat keys to new names (drummer→caller1, steers→steers1) ───
+  // This handles lineups saved before the rename so names don't disappear.
+  const migrateMap = { drummer: 'caller1', steers: 'steers1' };
+  let needsMigration = false;
+  const migrationUpdates = {};
+  Object.entries(migrateMap).forEach(([oldKey, newKey]) => {
+    if (lineup[oldKey] && !lineup[newKey]) {
+      migrationUpdates[newKey] = lineup[oldKey];
+      migrationUpdates[oldKey] = null;
+      lineup[newKey] = lineup[oldKey];
+      delete lineup[oldKey];
+      needsMigration = true;
+    }
+  });
+  if (needsMigration) {
+    db.ref(lineupPath(evId)).update(migrationUpdates).catch(()=>{});
+  }
+
   function seatName(key) {
     const m = members.find(m=>m.uid===lineup[key]);
     return m ? m.name : null;
