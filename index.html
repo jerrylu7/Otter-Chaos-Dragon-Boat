@@ -1925,7 +1925,7 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
     ${balPanel}
     <div class="boat-visual" style="margin-bottom:12px;padding:14px">
       <div style="text-align:center;margin-bottom:6px">
-        <div class="boat-section-title" style="font-size:13px;margin-bottom:6px">📣 Callers</div>
+        <div class="boat-section-title" style="font-size:13px;margin-bottom:6px;text-align:center">📣 Callers</div>
         <div style="display:flex;justify-content:center;gap:8px">
           ${seatEl('caller1','Caller 1')}
           ${seatEl('caller2','Caller 2')}
@@ -1938,7 +1938,7 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
       <div style="display:grid;grid-template-columns:1fr 28px 1fr;gap:5px 4px;align-items:center">${rows}</div>
       <hr style="margin:10px 0">
       <div style="text-align:center;margin-top:6px">
-        <div class="boat-section-title" style="font-size:13px;margin-bottom:6px">🎯 Steers</div>
+        <div class="boat-section-title" style="font-size:13px;margin-bottom:6px;text-align:center">🎯 Steers</div>
         <div style="display:flex;justify-content:center;gap:8px">
           ${seatEl('steers1','Steers 1')}
           ${seatEl('steers2','Steers 2')}
@@ -5213,17 +5213,10 @@ renderEvDetailLineup = function(evId, ev, members, lineup) {
   db.ref('settings/boatType').get().then(typeSnap => {
     const boatType = typeSnap.val() || 20;
     const rowCount = BOAT_TYPE_ROWS[boatType] || 10;
-    // Small delay ensures the base lineup body.innerHTML (set by the parallel fetch in
-    // renderEvDetailLineup) has finished rendering before we prepend/append to it.
     setTimeout(() => {
       if (can.edit()) addLineupTemplateButtons(evId);
       const body = document.getElementById('ev-detail-body');
-      if (body && (ev.type==='Practice'||ev.type==='Race')) {
-        const wDiv = document.createElement('div');
-        wDiv.innerHTML = renderWeightChart(lineup, members, rowCount);
-        body.appendChild(wDiv);
-        if (ev.date < today()) renderDebriefSection(evId);
-      }
+      if (body && ev.date < today()) renderDebriefSection(evId);
     }, 50);
   });
 };
