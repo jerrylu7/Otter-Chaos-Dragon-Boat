@@ -1110,8 +1110,8 @@ function buildSidebar() {
     { id:'dashboard', icon:'🏠', label:'Dashboard',  badge:'dash-badge' },
     { id:'practices', icon:'🚣', label:'Practices' },
     { id:'races',     icon:'🏁', label:'Races' },
+    { id:'raceday',   icon:'🏆', label:'Race Day',   sub:true },
     { id:'socials',   icon:'🦦', label:'Otter S.O.C.I.A.L' },
-    { id:'raceday',   icon:'🏆', label:'Race Day' },
     { id:'roster',    icon:'👥', label:'Roster' },
     { id:'profile',   icon:'👤', label:'My Profile' },
   ];
@@ -1141,6 +1141,7 @@ function buildSidebar() {
     if (p.editOnly  && !can.edit())  return;
     const btn = document.createElement('button');
     btn.className = 'nav-item'; btn.id = 'nav-'+p.id;
+    if (p.sub) btn.style.cssText = 'padding-left:36px;font-size:13px;opacity:0.85';
     const badgeHtml = p.badge ? `<span class="nav-badge" id="${p.badge}" style="display:none"></span>` : '';
     btn.innerHTML = `<span class="nav-icon">${p.icon}</span><span class="nav-label">${p.label}${badgeHtml}</span><span class="nav-tooltip">${p.label}</span>`;
     btn.onclick = () => navigate(p.id);
@@ -4270,7 +4271,6 @@ function pgRaceDay() {
   }
 
   // ── Live Results Feed ────────────────────────────────────────────────────────
-  // Fetch live results URL from Firebase settings, then render below race selector
   db.ref('settings/liveResultsUrl').get().then(lrSnap => {
     const liveUrl = lrSnap.val() || '';
     db.ref('events').get().then(evSnap=>{
@@ -4280,37 +4280,62 @@ function pgRaceDay() {
       if(!races.length){C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No races yet</div><div class="empty-sub">Add race events first, then manage heats and results here.</div></div></div>`;return;}
 
       const todayStr = today();
+
+      // Always default to next upcoming race; if none upcoming, most recent past
       const upcomingIdx = races.findIndex(r=>r.date>=todayStr);
-      const defaultIdx = upcomingIdx>=0 ? upcomingIdx : races.length-1;
+      const defaultIdx  = upcomingIdx>=0 ? upcomingIdx : races.length-1;
+
+      // Determine if live panel should be shown:
+      // Show if URL is set AND today is race day AND current Vancouver time is before 10pm
+      const nowVancouver   = new Date(new Date().toLocaleString('en-US', { timeZone:'America/Vancouver' }));
+      const todayRaceDay   = races.some(r => r.date === todayStr);
+      const before10pm     = nowVancouver.getHours() < 22;
+      const showLivePanel  = liveUrl && todayRaceDay && before10pm;
+
+      // Admin URL config strip — always visible to admins regardless of time
+      const showUrlConfig  = can.admin() && liveUrl;
+      const showUrlPrompt  = can.admin() && !liveUrl;
 
       C.innerHTML = '';
 
-      // Live results panel (shown when a URL is configured)
-      const livePanel = document.createElement('div');
-      livePanel.id = 'live-results-panel';
-      livePanel.style.cssText = 'margin-bottom:20px';
-      C.appendChild(livePanel);
+      // Admin-only URL bar (shown regardless of time/race day)
+      if (showUrlConfig || showUrlPrompt) {
+        const adminBar = document.createElement('div');
+        adminBar.innerHTML = showUrlConfig
+          ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:10px 14px;background:var(--surface-alt);border-radius:var(--radius);border:1px solid var(--border);flex-wrap:wrap">
+              <span style="font-size:13px;color:var(--text-3);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📡 ${esc(liveUrl)}</span>
+              <button class="btn btn-sm btn-ghost" onclick="configureLiveResults()">⚙ Change</button>
+            </div>`
+          : `<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:10px 14px;background:var(--surface-alt);border-radius:var(--radius);border:1px solid var(--border);flex-wrap:wrap">
+              <span style="font-size:13px;color:var(--text-3);flex:1">📡 No live results URL set</span>
+              <button class="btn btn-sm btn-ghost" onclick="configureLiveResults()">Configure</button>
+            </div>`;
+        C.appendChild(adminBar);
+      }
 
-      if (liveUrl) {
+      // Live results panel — only on race day before 10pm
+      if (showLivePanel) {
+        const livePanel = document.createElement('div');
+        livePanel.id = 'live-results-panel';
+        livePanel.style.cssText = 'margin-bottom:20px';
+        C.appendChild(livePanel);
         renderLiveResults(liveUrl, livePanel);
-        // Auto-refresh every 30 seconds
         if (window._liveResultsTimer) clearInterval(window._liveResultsTimer);
         window._liveResultsTimer = setInterval(() => {
-          if (document.getElementById('live-results-panel')) {
-            renderLiveResults(liveUrl, document.getElementById('live-results-panel'));
+          const panel = document.getElementById('live-results-panel');
+          if (panel) {
+            // Stop auto-refresh if it's now past 10pm
+            const now = new Date(new Date().toLocaleString('en-US', { timeZone:'America/Vancouver' }));
+            if (now.getHours() >= 22) {
+              clearInterval(window._liveResultsTimer);
+              panel.remove();
+              return;
+            }
+            renderLiveResults(liveUrl, panel);
           } else {
             clearInterval(window._liveResultsTimer);
           }
         }, 30000);
-      } else if (can.edit()) {
-        livePanel.innerHTML = `<div class="card" style="padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span style="font-size:20px">📡</span>
-          <div style="flex:1;min-width:0">
-            <div style="font-weight:700;font-size:14px;margin-bottom:2px">Live results feed</div>
-            <div style="font-size:12px;color:var(--text-3)">Paste a races.json URL to show live regatta results. Only admins/coaches can see this.</div>
-          </div>
-          <button class="btn btn-sm btn-ghost" onclick="configureLiveResults()">Configure</button>
-        </div>`;
       }
 
       const sel=document.createElement('div'); sel.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap';
@@ -4353,7 +4378,7 @@ function renderLiveResults(url, container) {
               <div style="font-size:11px;color:var(--text-3)">${races.length} heat${races.length!==1?'s':''} published · auto-refreshes every 30s</div>
             </div>
           </div>
-          ${can.edit()?`<button class="btn btn-sm btn-ghost" onclick="configureLiveResults()">⚙ Change URL</button>`:''}
+
         </div>`;
 
       // Our heats prominently at top
