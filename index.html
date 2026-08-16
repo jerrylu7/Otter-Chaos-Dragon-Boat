@@ -1750,6 +1750,7 @@ window.openEventDetail = function(evId, domEvent) {
       <div class="ev-detail-tabs" style="margin:0 0 20px">
         <button class="ev-detail-tab active" id="edt-rsvp" onclick="evPageTab('rsvp')">RSVP</button>
         <button class="ev-detail-tab" id="edt-lineup" onclick="evPageTab('lineup')">Lineup</button>
+        ${ev.type==='Race'?'<button class="ev-detail-tab" id="edt-results" onclick="evPageTab(\'results\')">Results</button>':''}
       </div>
       <div id="ev-detail-body"></div>`;
 
@@ -1763,11 +1764,96 @@ window.openEventDetail = function(evId, domEvent) {
 
 window.evPageTab = function(tab) {
   const d = window._evPage; if (!d) return;
-  ['rsvp','lineup'].forEach(t => {
+  ['rsvp','lineup','results'].forEach(t => {
     const el = document.getElementById('edt-'+t); if(el) el.classList.toggle('active', t===tab);
   });
-  if (tab==='rsvp')   renderEvDetailRsvp(d.evId, d.ev, d.members, d.lineup, d.uid);
-  if (tab==='lineup') renderEvDetailLineup(d.evId, d.ev, d.members, d.lineup);
+  if (tab==='rsvp')    renderEvDetailRsvp(d.evId, d.ev, d.members, d.lineup, d.uid);
+  if (tab==='lineup')  renderEvDetailLineup(d.evId, d.ev, d.members, d.lineup);
+  if (tab==='results') renderEvDetailResults(d.evId, d.ev);
+};
+
+function renderEvDetailResults(evId, ev) {
+  const body = document.getElementById('ev-detail-body');
+  if (!body) return;
+  body.innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading results…</div>';
+
+  db.ref('raceHeats/'+evId).get().then(snap => {
+    const heats = Object.values(snap.val()||{}).sort((a,b)=>Number(a.order||a.heatNumber)-Number(b.order||b.heatNumber));
+
+    if (!heats.length) {
+      body.innerHTML = `
+        <div class="card" style="padding:28px;text-align:center">
+          <div style="font-size:32px;margin-bottom:10px">🏁</div>
+          <div style="font-weight:700;margin-bottom:6px">No results saved yet</div>
+          <div style="font-size:13px;color:var(--text-3);margin-bottom:16px">Go to Race Day and click <strong>Save results</strong> to import from the live results feed.</div>
+          ${can.edit()?`<button class="btn btn-primary" onclick="navigate('raceday')">Go to Race Day</button>`:''}
+        </div>`;
+      return;
+    }
+
+    // Summary stats from saved heats
+    const ourResults = heats.map(h => ({ place: Number(h.place)||0, time: h.time_recorded, name: h.name, division: h.division })).filter(h=>h.place);
+    const bestPlace = ourResults.length ? Math.min(...ourResults.map(h=>h.place)) : null;
+    const bestTime  = ourResults.length ? ourResults.slice().sort((a,b)=>a.time?.localeCompare(b.time||''))[0]?.time : null;
+
+    body.innerHTML = `
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Otter Chaos at ${esc(ev.name)}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
+          <div class="metric"><div class="metric-label">Heats</div><div class="metric-value">${heats.length}</div></div>
+          <div class="metric"><div class="metric-label">Best place</div><div class="metric-value" style="color:var(--accent)">${bestPlace ? (bestPlace===1?'🥇':bestPlace===2?'🥈':bestPlace===3?'🥉':'#'+bestPlace) : '—'}</div></div>
+          <div class="metric"><div class="metric-label">Best time</div><div class="metric-value" style="font-size:16px">${bestTime||'—'}</div></div>
+        </div>
+      </div>
+
+      ${heats.map(h => {
+        const medal = h.place==='1'||h.place===1?'🥇':h.place==='2'||h.place===2?'🥈':h.place==='3'||h.place===3?'🥉':'';
+        const allResults = h.allResults ? (() => { try { return JSON.parse(h.allResults); } catch(e){ return []; } })() : [];
+        return `<div class="card" style="padding:18px;margin-bottom:12px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <div>
+              <div style="font-weight:700;font-size:15px">${esc(h.name||'Heat '+h.heatNumber)}</div>
+              <div style="font-size:12px;color:var(--text-3);margin-top:2px">${h.time?'⏰ '+h.time:''}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              ${h.place?`<span class="badge" style="background:var(--accent-bg);color:var(--accent-text);font-size:13px">${medal||'#'+h.place} Place ${h.place}</span>`:''}
+              ${h.time_recorded?`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);font-size:12px">⏱ ${esc(h.time_recorded)}</span>`:''}
+              ${can.edit()?`<button class="btn btn-sm btn-danger btn-ghost" onclick="deleteRaceHeat('${evId}','${h.heatNumber}')">✕</button>`:''}
+            </div>
+          </div>
+          ${allResults.length?`
+            <div style="border-top:1px solid var(--border);padding-top:10px">
+              <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Full results</div>
+              ${allResults.map(r=>{
+                const isUs = r.teamName?.toLowerCase().includes('otter chaos');
+                const m2 = r.place==='1'?'🥇':r.place==='2'?'🥈':r.place==='3'?'🥉':'';
+                return `<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px;${isUs?'background:var(--accent-bg);':''}">
+                  <span style="font-size:12px;width:20px;text-align:center;flex-shrink:0;font-weight:700">${m2||r.place}</span>
+                  <span style="font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isUs?'color:var(--accent-text);font-weight:700':''}">${esc(r.teamName)}</span>
+                  <span style="font-size:12px;color:var(--text-3);flex-shrink:0">${r.totalTime}</span>
+                </div>`;
+              }).join('')}
+            </div>`:''}
+          ${h.penaltyWording?`<div style="margin-top:8px;font-size:12px;color:var(--warning-text);padding:6px 8px;background:var(--warning-bg);border-radius:var(--radius)">⚠ ${esc(h.penaltyWording)}</div>`:''}
+        </div>`;
+      }).join('')}
+
+      ${can.edit()?`<div style="text-align:center;margin-top:4px">
+        <button class="btn btn-ghost btn-sm" onclick="navigate('raceday')">📥 Update from live feed</button>
+      </div>`:''}
+    `;
+  });
+}
+
+window.deleteRaceHeat = async function(evId, heatNumber) {
+  if (!can.edit()) return;
+  if (!confirm('Remove this heat result?')) return;
+  const snap = await db.ref('raceHeats/'+evId).get();
+  const heats = snap.val()||{};
+  const key = Object.entries(heats).find(([,h])=>String(h.heatNumber)===String(heatNumber))?.[0];
+  if (key) await db.ref('raceHeats/'+evId+'/'+key).remove();
+  showToast('Removed','🗑');
+  renderEvDetailResults(evId, window._evPage?.ev);
 };
 
 function renderEvDetailRsvp(evId, ev, members, lineup, uid) {
