@@ -6112,6 +6112,21 @@ window.saveLiveResultsToRace = async function(raceId) {
     const url = lrSnap.val();
     if (!url) { showToast('No live results URL configured','⚠️'); return; }
 
+    // Extract race name from URL hostname
+    // e.g. "springsprint2026.pages.dev" → "Spring Sprint 2026"
+    function raceNameFromUrl(u) {
+      try {
+        const host = new URL(u).hostname.split('.')[0];
+        return host
+          .replace(/([a-z])(\d)/g, '$1 $2')
+          .replace(/(\d)([a-z])/gi, '$1 $2')
+          .split(/[\s_-]+/)
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ').trim();
+      } catch(e) { return ''; }
+    }
+    const raceName = raceNameFromUrl(url);
+
     const res = await fetch(url);
     if (!res.ok) throw new Error('fetch failed');
     const data = await res.json();
@@ -6127,14 +6142,22 @@ window.saveLiveResultsToRace = async function(raceId) {
       return;
     }
 
+    // Find best matching race event in Firebase by name similarity
+    const eventsSnap = await db.ref('events').get();
+    const allRaceEvents = Object.entries(eventsSnap.val()||{}).filter(([,e])=>e.type==='Race');
+    function norm(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,''); }
+    function fuzzyMatch(a,b){ const na=norm(a),nb=norm(b); return na.includes(nb.slice(0,6))||nb.includes(na.slice(0,6)); }
+    const matched = allRaceEvents.find(([,e])=>fuzzyMatch(e.name||'', raceName));
+    const targetRaceId = matched ? matched[0] : raceId;
+    const targetRaceName = matched ? matched[1].name : raceName;
+
     // Get existing heats to avoid duplicates
-    const existingSnap = await db.ref('raceHeats/'+raceId).get();
+    const existingSnap = await db.ref('raceHeats/'+targetRaceId).get();
     const existing = existingSnap.val() || {};
     const existingHeatNums = new Set(Object.values(existing).map(h => String(h.heatNumber)));
 
     let saved = 0;
     for (const race of ourHeats) {
-      // Skip if already saved
       if (existingHeatNums.has(String(race.heat))) continue;
 
       const ourResult = race.results.find(r => r.teamName?.toLowerCase().includes('otter chaos'));
@@ -6142,28 +6165,34 @@ window.saveLiveResultsToRace = async function(raceId) {
         .filter(r => r.teamName && r.teamName !== '#N/A' && r.teamName !== '' && r.place)
         .sort((a,b) => Number(a.place)-Number(b.place));
 
-      const key = db.ref('raceHeats/'+raceId).push().key;
-      await db.ref('raceHeats/'+raceId+'/'+key).set({
-        name:          `Heat ${race.heat} — ${race.heatDescription}`,
-        heatNumber:    race.heat,
-        division:      race.heatDescription,
-        time:          race.scheduledTime?.slice(0,5) || '',
-        order:         Number(race.heat),
-        result:        ourResult?.place ? `Place ${ourResult.place} of ${sorted.length}` : '',
-        time_recorded: ourResult?.totalTime || '',
-        lane:          ourResult?.lane || '',
-        place:         ourResult?.place || '',
+      const key = db.ref('raceHeats/'+targetRaceId).push().key;
+      await db.ref('raceHeats/'+targetRaceId+'/'+key).set({
+        name:           `Heat ${race.heat} — ${race.heatDescription}`,
+        heatNumber:     race.heat,
+        division:       race.heatDescription,
+        time:           race.scheduledTime?.slice(0,5) || '',
+        order:          Number(race.heat),
+        result:         ourResult?.place ? `Place ${ourResult.place} of ${sorted.length}` : '',
+        time_recorded:  ourResult?.totalTime || '',
+        lane:           ourResult?.lane || '',
+        place:          ourResult?.place || '',
         penaltyWording: race.penaltyWording || '',
-        allResults:    JSON.stringify(sorted),
-        savedAt:       Date.now(),
+        allResults:     JSON.stringify(sorted),
+        savedAt:        Date.now(),
+        sourceUrl:      url,
       });
       saved++;
     }
 
     if (saved === 0) {
-      showToast('All Otter Chaos heats already saved ✓');
+      showToast(`All Otter Chaos heats already saved to ${targetRaceName} ✓`);
     } else {
-      showToast(`Saved ${saved} heat${saved!==1?'s':''} ✓ 🏁`);
+      showToast(`Saved ${saved} heat${saved!==1?'s':''} to ${targetRaceName} ✓ 🏁`);
+      if (targetRaceId !== raceId) {
+        // Switch the race selector to the matched race
+        const sel = document.getElementById('rd-race-sel');
+        if (sel) { sel.value = targetRaceId; loadRaceDayDetail(targetRaceId); return; }
+      }
     }
     loadRaceDayDetail(raceId);
   } catch(e) {
