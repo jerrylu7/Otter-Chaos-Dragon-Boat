@@ -4182,30 +4182,197 @@ function pgRaceDay() {
   if (can.edit()) {
     const b=document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Add heat'; b.onclick=()=>openHeatModal(null,null); A.appendChild(b);
   }
-  // Simple full fetch + client-side filter (avoids needing a Firebase index on 'type')
-  db.ref('events').get().then(evSnap=>{
-    const races = Object.values(evSnap.val()||{})
-      .filter(e => e.type === 'Race')
-      .sort((a,b)=>a.date.localeCompare(b.date)); // chronological, earliest first
-    if(!races.length){C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No races yet</div><div class="empty-sub">Add race events first, then manage heats and results here.</div></div></div>`;return;}
 
-    // Race selector — default to the next upcoming race, or the most recent past one if none upcoming
-    const todayStr = today();
-    const upcomingIdx = races.findIndex(r=>r.date>=todayStr);
-    const defaultIdx = upcomingIdx>=0 ? upcomingIdx : races.length-1;
+  // ── Live Results Feed ────────────────────────────────────────────────────────
+  // Fetch live results URL from Firebase settings, then render below race selector
+  db.ref('settings/liveResultsUrl').get().then(lrSnap => {
+    const liveUrl = lrSnap.val() || '';
+    db.ref('events').get().then(evSnap=>{
+      const races = Object.values(evSnap.val()||{})
+        .filter(e => e.type === 'Race')
+        .sort((a,b)=>a.date.localeCompare(b.date));
+      if(!races.length){C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No races yet</div><div class="empty-sub">Add race events first, then manage heats and results here.</div></div></div>`;return;}
 
-    const sel=document.createElement('div'); sel.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap';
-    sel.innerHTML=`<label style="font-size:14px;font-weight:700;color:var(--text-2)">Race:</label>
-      <select id="rd-race-sel" style="max-width:300px">${races.map((r,i)=>`<option value="${r.id}" ${i===defaultIdx?'selected':''}>${esc(r.name)} — ${fmtDate(r.date)}</option>`).join('')}</select>`;
-    C.innerHTML='';
-    C.appendChild(sel);
-    document.getElementById('rd-race-sel').onchange=function(){loadRaceDayDetail(this.value);};
-    loadRaceDayDetail(races[defaultIdx].id);
-  }).catch(err => {
-    console.error('Race Day load error:', err);
-    C.innerHTML = `<div class="card" style="padding:24px;text-align:center"><div style="font-size:28px;margin-bottom:10px">🏆</div><div style="font-weight:700;margin-bottom:6px">Couldn't load races</div><div style="font-size:13px;color:var(--text-3);margin-bottom:16px">Check your connection and try again.</div><button class="btn btn-primary" onclick="pgRaceDay()">Retry</button></div>`;
+      const todayStr = today();
+      const upcomingIdx = races.findIndex(r=>r.date>=todayStr);
+      const defaultIdx = upcomingIdx>=0 ? upcomingIdx : races.length-1;
+
+      C.innerHTML = '';
+
+      // Live results panel (shown when a URL is configured)
+      const livePanel = document.createElement('div');
+      livePanel.id = 'live-results-panel';
+      livePanel.style.cssText = 'margin-bottom:20px';
+      C.appendChild(livePanel);
+
+      if (liveUrl) {
+        renderLiveResults(liveUrl, livePanel);
+        // Auto-refresh every 30 seconds
+        if (window._liveResultsTimer) clearInterval(window._liveResultsTimer);
+        window._liveResultsTimer = setInterval(() => {
+          if (document.getElementById('live-results-panel')) {
+            renderLiveResults(liveUrl, document.getElementById('live-results-panel'));
+          } else {
+            clearInterval(window._liveResultsTimer);
+          }
+        }, 30000);
+      } else if (can.edit()) {
+        livePanel.innerHTML = `<div class="card" style="padding:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-size:20px">📡</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:700;font-size:14px;margin-bottom:2px">Live results feed</div>
+            <div style="font-size:12px;color:var(--text-3)">Paste a races.json URL to show live regatta results. Only admins/coaches can see this.</div>
+          </div>
+          <button class="btn btn-sm btn-ghost" onclick="configureLiveResults()">Configure</button>
+        </div>`;
+      }
+
+      const sel=document.createElement('div'); sel.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap';
+      sel.innerHTML=`<label style="font-size:14px;font-weight:700;color:var(--text-2)">Race:</label>
+        <select id="rd-race-sel" style="max-width:300px">${races.map((r,i)=>`<option value="${r.id}" ${i===defaultIdx?'selected':''}>${esc(r.name)} — ${fmtDate(r.date)}</option>`).join('')}</select>`;
+      C.appendChild(sel);
+      document.getElementById('rd-race-sel').onchange=function(){loadRaceDayDetail(this.value);};
+      loadRaceDayDetail(races[defaultIdx].id);
+    }).catch(err => {
+      console.error('Race Day load error:', err);
+      C.innerHTML = `<div class="card" style="padding:24px;text-align:center"><div style="font-size:28px;margin-bottom:10px">🏆</div><div style="font-weight:700;margin-bottom:6px">Couldn't load races</div><div style="font-size:13px;color:var(--text-3);margin-bottom:16px">Check your connection and try again.</div><button class="btn btn-primary" onclick="pgRaceDay()">Retry</button></div>`;
+    });
   });
 }
+
+function renderLiveResults(url, container) {
+  const teamName = (currentProfile?.teamName || TEAM_NAME_DEFAULT).toLowerCase();
+
+  fetch(url)
+    .then(r => { if(!r.ok) throw new Error('fetch failed'); return r.json(); })
+    .then(data => {
+      const races = (data.races || []).filter(r =>
+        r.status === 'Publish' && r.results?.some(res => res.teamName && res.teamName !== '#N/A' && res.teamName !== '')
+      );
+      if (!races.length) {
+        container.innerHTML = `<div class="card" style="padding:16px;text-align:center;color:var(--text-3);font-size:13px">📡 Live results — no heats published yet. Auto-refreshes every 30s.</div>`;
+        return;
+      }
+
+      // Find heats involving Otter Chaos
+      const ourHeats = races.filter(r => r.results?.some(res => res.teamName?.toLowerCase().includes('otter chaos')));
+      const otherHeats = races.filter(r => !r.results?.some(res => res.teamName?.toLowerCase().includes('otter chaos')));
+
+      let html = `<div class="card" style="padding:0;overflow:hidden">
+        <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:18px">📡</span>
+            <div>
+              <div style="font-weight:700;font-size:14px">Live Results</div>
+              <div style="font-size:11px;color:var(--text-3)">${races.length} heat${races.length!==1?'s':''} published · auto-refreshes every 30s</div>
+            </div>
+          </div>
+          ${can.edit()?`<button class="btn btn-sm btn-ghost" onclick="configureLiveResults()">⚙ Change URL</button>`:''}
+        </div>`;
+
+      // Our heats prominently at top
+      if (ourHeats.length) {
+        html += `<div style="padding:10px 16px;background:var(--accent-bg);border-bottom:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;color:var(--accent-text);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">🦦 Otter Chaos Results</div>`;
+        ourHeats.forEach(race => {
+          const ourResult = race.results.find(r => r.teamName?.toLowerCase().includes('otter chaos'));
+          const placeEmoji = ourResult?.place === '1' ? '🥇' : ourResult?.place === '2' ? '🥈' : ourResult?.place === '3' ? '🥉' : `#${ourResult?.place}`;
+          html += `<div style="margin-bottom:8px;padding:10px 12px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--accent)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div style="font-weight:700;font-size:13px">Heat ${race.heat} — ${esc(race.heatDescription)}</div>
+              <div style="font-size:18px">${placeEmoji}</div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div style="font-size:13px;color:var(--accent-text);font-weight:700">Otter Chaos</div>
+              <div style="font-size:13px;font-weight:700">${ourResult?.totalTime || '—'}</div>
+            </div>
+            ${race.penaltyWording?`<div style="font-size:11px;color:var(--warning-text);margin-top:4px">⚠ ${esc(race.penaltyWording)}</div>`:''}
+          </div>`;
+        });
+        html += `</div>`;
+      }
+
+      // All heats in a scrollable list
+      html += `<div style="padding:10px 16px 4px">
+        <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">All Heats</div>`;
+
+      races.forEach(race => {
+        const sorted = [...race.results]
+          .filter(r => r.teamName && r.teamName !== '#N/A' && r.teamName !== '' && r.place)
+          .sort((a,b) => Number(a.place)-Number(b.place));
+        if (!sorted.length) return;
+
+        html += `<details style="margin-bottom:8px">
+          <summary style="cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--surface-alt);border-radius:var(--radius);border:1px solid var(--border)">
+            <div>
+              <span style="font-size:12px;font-weight:700">Heat ${race.heat}</span>
+              <span style="font-size:12px;color:var(--text-3);margin-left:6px">${esc(race.heatDescription)}</span>
+            </div>
+            <span style="font-size:11px;color:var(--text-3)">${race.updatedTime ? 'Updated '+race.updatedTime : ''}</span>
+          </summary>
+          <div style="padding:6px 4px 4px">
+            ${sorted.map(r => {
+              const isUs = r.teamName?.toLowerCase().includes('otter chaos');
+              const medal = r.place==='1'?'🥇':r.place==='2'?'🥈':r.place==='3'?'🥉':'';
+              return `<div style="display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:4px;${isUs?'background:var(--accent-bg);font-weight:700':''}">
+                <span style="font-size:12px;width:18px;text-align:center;flex-shrink:0">${medal||r.place}</span>
+                <span style="font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isUs?'color:var(--accent-text)':''}">${esc(r.teamName)}</span>
+                <span style="font-size:12px;color:var(--text-3);flex-shrink:0">${r.totalTime}</span>
+              </div>`;
+            }).join('')}
+            ${race.penaltyWording?`<div style="font-size:11px;color:var(--warning-text);padding:4px 6px">⚠ ${esc(race.penaltyWording)}</div>`:''}
+            ${race.advancementWording?`<div style="font-size:11px;color:var(--text-3);padding:4px 6px;white-space:pre-line">${esc(race.advancementWording)}</div>`:''}
+          </div>
+        </details>`;
+      });
+
+      html += `</div></div>`;
+      container.innerHTML = html;
+    })
+    .catch(() => {
+      container.innerHTML = `<div class="card" style="padding:14px 16px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:18px">⚠️</span>
+        <div>
+          <div style="font-weight:700;font-size:13px">Could not load live results</div>
+          <div style="font-size:12px;color:var(--text-3)">Check your internet connection. Auto-retrying in 30s.</div>
+        </div>
+      </div>`;
+    });
+}
+
+window.configureLiveResults = function() {
+  if (!can.edit()) return;
+  db.ref('settings/liveResultsUrl').get().then(snap => {
+    const current = snap.val() || '';
+    const overlay = document.createElement('div'); overlay.className='overlay';
+    overlay.addEventListener('click', e=>{ if(e.target===overlay) closeModal(); });
+    overlay.innerHTML = `<div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <div><div class="modal-title">📡 Live Results URL</div>
+        <div class="modal-sub">Paste the races.json URL for this regatta</div></div>
+        <button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">races.json URL</label>
+        <input id="live-url-input" type="url" value="${esc(current)}" placeholder="https://example.pages.dev/races.json" style="margin-bottom:8px">
+        <div style="font-size:12px;color:var(--text-3)">Leave blank to hide the live results panel.</div>
+      </div>
+      <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveLiveResultsUrl()">Save</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay); modalEl = overlay;
+    document.getElementById('live-url-input')?.focus();
+  });
+};
+
+window.saveLiveResultsUrl = async function() {
+  const url = document.getElementById('live-url-input')?.value?.trim() || '';
+  await db.ref('settings/liveResultsUrl').set(url);
+  closeModal();
+  pgRaceDay();
+};
 
 function loadRaceDayDetail(raceId) {
   const C=document.getElementById('pg-content');
