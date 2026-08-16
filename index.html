@@ -4382,10 +4382,12 @@ function loadRaceDayDetail(raceId) {
     db.ref('events/'+raceId).get(),
     db.ref('raceHeats/'+raceId).get(),
     db.ref('users').get(),
-  ]).then(([evSnap,heatSnap,uSnap])=>{
+    db.ref('settings/liveResultsUrl').get(),
+  ]).then(([evSnap,heatSnap,uSnap,lrSnap])=>{
     const ev=evSnap.val(); if(!ev)return;
     const heats=Object.entries(heatSnap.val()||{}).sort((a,b)=>a[1].order-b[1].order);
     const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&(ev.rsvps||{})[u.uid]==='yes').sort((a,b)=>a.name.localeCompare(b.name));
+    const liveUrl = lrSnap.val()||'';
     const detail=document.createElement('div'); detail.id='rd-detail';
     detail.innerHTML=`
       <div class="metric-grid" style="margin-bottom:20px">
@@ -4394,6 +4396,17 @@ function loadRaceDayDetail(raceId) {
         <div class="metric"><div class="metric-label">Confirmed going</div><div class="metric-value" style="color:var(--success)">${members.length}</div></div>
         <div class="metric"><div class="metric-label">Heats</div><div class="metric-value">${heats.length}</div></div>
       </div>
+
+      ${can.edit() && liveUrl ? `<div class="card" style="padding:14px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:18px">📥</span>
+          <div>
+            <div style="font-weight:700;font-size:14px">Save results from live feed</div>
+            <div style="font-size:12px;color:var(--text-3)">Pulls Otter Chaos heats from the live results and saves them permanently</div>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="saveLiveResultsToRace('${raceId}')">Save results</button>
+      </div>` : ''}
 
       ${heats.length?heats.map(([hk,h])=>`
         <div class="card" style="padding:20px;margin-bottom:14px">
@@ -4404,13 +4417,25 @@ function loadRaceDayDetail(raceId) {
             </div>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
               ${h.result?`<span class="badge" style="background:var(--success-bg);color:var(--success-text);font-size:13px">🏆 ${esc(h.result)}</span>`:''}
+              ${h.time_recorded?`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);font-size:12px">⏱ ${esc(h.time_recorded)}</span>`:''}
               ${can.edit()?`<button class="btn btn-sm btn-ghost" onclick="openHeatModal('${raceId}','${hk}')">Edit</button>
               <button class="btn btn-sm btn-danger btn-ghost" onclick="deleteHeat('${raceId}','${hk}')">✕</button>`:''}
             </div>
           </div>
+          ${h.lane?`<div style="font-size:12px;color:var(--text-3);margin-bottom:6px">Lane ${esc(String(h.lane))} · Place <strong>${esc(String(h.place||'—'))}</strong></div>`:''}
+          ${h.allResults?`<div style="margin-top:8px">${JSON.parse(h.allResults).map(r=>{
+            const isUs=r.teamName?.toLowerCase().includes('otter chaos');
+            const medal=r.place==='1'?'🥇':r.place==='2'?'🥈':r.place==='3'?'🥉':'';
+            return `<div style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;${isUs?'background:var(--accent-bg);font-weight:700':''}">
+              <span style="font-size:12px;width:18px;text-align:center;flex-shrink:0">${medal||r.place}</span>
+              <span style="font-size:13px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${isUs?'color:var(--accent-text)':''}">${esc(r.teamName)}</span>
+              <span style="font-size:12px;color:var(--text-3);flex-shrink:0">${r.totalTime}</span>
+            </div>`;
+          }).join('')}</div>`:''}
           ${h.notes?`<div style="font-size:13px;color:var(--text-2);background:var(--surface-alt);padding:10px 12px;border-radius:var(--radius);margin-top:8px;white-space:pre-wrap">${esc(h.notes)}</div>`:''}
+          ${h.penaltyWording?`<div style="font-size:12px;color:var(--warning-text);margin-top:6px">⚠ ${esc(h.penaltyWording)}</div>`:''}
         </div>`).join('')
-        :`<div class="card" style="padding:20px;text-align:center;color:var(--text-3)">No heats added yet.${can.edit()?' Click <strong>Add heat</strong> above to get started.':''}</div>`}
+        :`<div class="card" style="padding:20px;text-align:center;color:var(--text-3)">No heats saved yet.${can.edit() && liveUrl?' Use <strong>Save results</strong> above to import from the live feed, or click <strong>Add heat</strong> to add manually.':can.edit()?' Click <strong>Add heat</strong> above to get started.':''}</div>`}
 
       ${can.edit()?`<div class="card" style="padding:20px;margin-top:8px">
         <div style="font-size:14px;font-weight:700;margin-bottom:10px">Race day roster — ${members.length} confirmed</div>
@@ -6074,6 +6099,77 @@ window.changeAccountPassword = async function() {
     if (e.code === 'auth/wrong-password') accMsg('Incorrect current password.');
     else if (e.code === 'auth/weak-password') accMsg('Password is too weak — please choose a stronger one.');
     else accMsg('Could not update password: ' + e.message);
+  }
+};
+
+// ── Save live results to race heats in Firebase ───────────────────────────────
+window.saveLiveResultsToRace = async function(raceId) {
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+
+  try {
+    const lrSnap = await db.ref('settings/liveResultsUrl').get();
+    const url = lrSnap.val();
+    if (!url) { showToast('No live results URL configured','⚠️'); return; }
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('fetch failed');
+    const data = await res.json();
+
+    const ourHeats = (data.races||[]).filter(r =>
+      r.status === 'Publish' &&
+      r.results?.some(result => result.teamName?.toLowerCase().includes('otter chaos'))
+    );
+
+    if (!ourHeats.length) {
+      showToast('No Otter Chaos heats found in live results','⚠️');
+      if (btn) { btn.disabled = false; btn.textContent = 'Save results'; }
+      return;
+    }
+
+    // Get existing heats to avoid duplicates
+    const existingSnap = await db.ref('raceHeats/'+raceId).get();
+    const existing = existingSnap.val() || {};
+    const existingHeatNums = new Set(Object.values(existing).map(h => String(h.heatNumber)));
+
+    let saved = 0;
+    for (const race of ourHeats) {
+      // Skip if already saved
+      if (existingHeatNums.has(String(race.heat))) continue;
+
+      const ourResult = race.results.find(r => r.teamName?.toLowerCase().includes('otter chaos'));
+      const sorted = race.results
+        .filter(r => r.teamName && r.teamName !== '#N/A' && r.teamName !== '' && r.place)
+        .sort((a,b) => Number(a.place)-Number(b.place));
+
+      const key = db.ref('raceHeats/'+raceId).push().key;
+      await db.ref('raceHeats/'+raceId+'/'+key).set({
+        name:          `Heat ${race.heat} — ${race.heatDescription}`,
+        heatNumber:    race.heat,
+        division:      race.heatDescription,
+        time:          race.scheduledTime?.slice(0,5) || '',
+        order:         Number(race.heat),
+        result:        ourResult?.place ? `Place ${ourResult.place} of ${sorted.length}` : '',
+        time_recorded: ourResult?.totalTime || '',
+        lane:          ourResult?.lane || '',
+        place:         ourResult?.place || '',
+        penaltyWording: race.penaltyWording || '',
+        allResults:    JSON.stringify(sorted),
+        savedAt:       Date.now(),
+      });
+      saved++;
+    }
+
+    if (saved === 0) {
+      showToast('All Otter Chaos heats already saved ✓');
+    } else {
+      showToast(`Saved ${saved} heat${saved!==1?'s':''} ✓ 🏁`);
+    }
+    loadRaceDayDetail(raceId);
+  } catch(e) {
+    console.error('Save live results error:', e);
+    showToast('Could not fetch live results — check your connection','⚠️');
+    if (btn) { btn.disabled = false; btn.textContent = 'Save results'; }
   }
 };
 
