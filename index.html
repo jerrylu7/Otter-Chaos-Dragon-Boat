@@ -1619,7 +1619,7 @@ function renderDashCalendar(year, month, allEvents, uid, allAvailability, member
       <div class="cal-legend-item"><div class="cal-legend-swatch" style="background:#e8f0fd;border:1px solid #1a3c8f"></div> 🍁 BC Holiday</div>
       ${unavailLegend}
       <div class="cal-legend-item"><span style="font-size:10px;border:1px dashed var(--text-3);border-radius:3px;padding:0 4px;color:var(--text-3)">dashed</span> No reply</div>
-      <div class="cal-legend-item"><span style="opacity:.4;font-size:12px;color:var(--text-2)">faded</span> Not going</div>
+      <div class="cal-legend-item"><span style="opacity:.4;font-size:12px;color:var(--text-2)">faded</span> Not Attending</div>
     </div>
   </div>`;
 }
@@ -1656,7 +1656,7 @@ function renderDashEventList(allEvents, uid, mySeat) {
     const seat=mySeat?mySeat(ev.id):null;
     const sc=rsvp==='yes'?'rsvp-yes':rsvp==='no'?'rsvp-no':'rsvp-pending';
     const isRace=ev.type==='Race';
-    const pill=rsvp==='yes'?'<span class="rsvp-status-pill yes">\u2713 Going</span>':rsvp==='no'?'<span class="rsvp-status-pill no">\u2717 Not going</span>':'<span class="rsvp-status-pill pending">\u23f3 No reply</span>';
+    const pill=rsvp==='yes'?'<span class="rsvp-status-pill yes">\u2713 Going</span>':rsvp==='no'?'<span class="rsvp-status-pill no">\u2717 Not Attending</span>':'<span class="rsvp-status-pill pending">\u23f3 No reply</span>';
     const si=seat?`<div class="dash-my-seat">🚣 Your seat: <strong>${esc(seat)}</strong></div>`:'';
     const du=Math.round((new Date(ev.date+'T12:00:00')-new Date())/86400000);
     const dl=du===0?'🔴 Today!':du===1?'🟡 Tomorrow':`${du}d away`;
@@ -1673,8 +1673,8 @@ function renderDashEventList(allEvents, uid, mySeat) {
         <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">${pill} ${si}</div>
       </div>
       <div class="rsvp-action-btns" onclick="event.stopPropagation()">
-        <button class="rsvp-action-btn ${rsvp==='yes'?'selected-yes':''}" onclick="dashRsvp('${ev.id}','yes',this)">✓ Going</button>
-        <button class="rsvp-action-btn ${rsvp==='no'?'selected-no':''}" onclick="dashRsvp('${ev.id}','no',this)">✗ No</button>
+        <button class="rsvp-action-btn ${rsvp==='yes'?'selected-yes':''}" onclick="dashRsvp('${ev.id}','yes',this)">✓ Attending</button>
+        <button class="rsvp-action-btn ${rsvp==='no'?'selected-no':''}" onclick="dashRsvp('${ev.id}','no',this)">✗ Not Attending</button>
       </div>
     </div>`;
   }).join('');
@@ -1740,8 +1740,8 @@ window.openEventDetail = function(evId, domEvent) {
     window._evPage = { evId, ev, members, lineup, uid, prev };
     window._currentBoat = 1; // reset boat selector for each fresh event page
 
-    // Build tab bar + content area
-    const C = document.getElementById('pg-content');
+    // Default tab — Lineup for practices, RSVP for everything else
+    const defaultTab = ev.type === 'Practice' ? 'lineup' : 'rsvp';
     C.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px">
         <span class="badge ${evBadgeClass(ev.type)}" style="font-size:13px">${ev.type}</span>
@@ -1749,13 +1749,14 @@ window.openEventDetail = function(evId, domEvent) {
         <span style="color:var(--text-3);font-size:13px">✓ ${yesCount} going</span>
       </div>
       <div class="ev-detail-tabs" style="margin:0 0 20px">
-        <button class="ev-detail-tab active" id="edt-rsvp" onclick="evPageTab('rsvp')">RSVP</button>
-        <button class="ev-detail-tab" id="edt-lineup" onclick="evPageTab('lineup')">Lineup</button>
+        <button class="ev-detail-tab ${defaultTab==='rsvp'?'active':''}" id="edt-rsvp" onclick="evPageTab('rsvp')">RSVP</button>
+        <button class="ev-detail-tab ${defaultTab==='lineup'?'active':''}" id="edt-lineup" onclick="evPageTab('lineup')">Lineup</button>
         ${ev.type==='Race'?'<button class="ev-detail-tab" id="edt-results" onclick="evPageTab(\'results\')">Results</button>':''}
       </div>
       <div id="ev-detail-body"></div>`;
 
-    renderEvDetailRsvp(evId, ev, members, lineup, uid);
+    if (defaultTab === 'lineup') renderEvDetailLineup(evId, ev, members, lineup);
+    else renderEvDetailRsvp(evId, ev, members, lineup, uid);
   }).catch(err => {
     console.error('Event detail load error:', err);
     showToast('Could not load event — check your connection','⚠️');
@@ -1872,10 +1873,10 @@ function renderEvDetailRsvp(evId, ev, members, lineup, uid) {
     <div class="card" style="padding:16px;margin-bottom:16px">
       <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">My RSVP</div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <div id="evd-pill">${myRsvp==='yes'?'<span class="rsvp-status-pill yes">✓ Going</span>':myRsvp==='no'?'<span class="rsvp-status-pill no">✗ Not going</span>':'<span class="rsvp-status-pill pending">⏳ No reply yet</span>'}</div>
+        <div id="evd-pill">${myRsvp==='yes'?'<span class="rsvp-status-pill yes">✓ Attending</span>':myRsvp==='no'?'<span class="rsvp-status-pill no">✗ Not Attending</span>':'<span class="rsvp-status-pill pending">⏳ No reply yet</span>'}</div>
         <div style="display:flex;gap:6px">
-          <button class="rsvp-action-btn ${myRsvp==='yes'?'selected-yes':''}" id="evd-yes" onclick="evdRsvp('${evId}','yes')">✓ Going</button>
-          <button class="rsvp-action-btn ${myRsvp==='no'?'selected-no':''}" id="evd-no" onclick="evdRsvp('${evId}','no')">✗ No</button>
+          <button class="rsvp-action-btn ${myRsvp==='yes'?'selected-yes':''}" id="evd-yes" onclick="evdRsvp('${evId}','yes')">✓ Attending</button>
+          <button class="rsvp-action-btn ${myRsvp==='no'?'selected-no':''}" id="evd-no" onclick="evdRsvp('${evId}','no')">✗ Not Attending</button>
         </div>
         ${mySeat?`<div class="dash-my-seat">🚣 Your seat: <strong>${esc(mySeat)}</strong></div>`:''}
       </div>
@@ -1884,11 +1885,11 @@ function renderEvDetailRsvp(evId, ev, members, lineup, uid) {
     <!-- Team RSVP summary -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
       <div class="card" style="padding:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--success-text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">✓ Going (${goingMembers.length})</div>
+        <div style="font-size:11px;font-weight:700;color:var(--success-text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">✓ Attending (${goingMembers.length})</div>
         ${goingMembers.length?goingMembers.map(m=>`<div style="display:flex;align-items:center;gap:6px;padding:4px 0"><div class="avatar" style="width:24px;height:24px;font-size:9px">${initials(m.name)}</div><span style="font-size:13px">${esc(m.name)}</span></div>`).join(''):'<div style="font-size:13px;color:var(--text-3)">No one yet</div>'}
       </div>
       <div class="card" style="padding:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--danger-text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">✗ Not going (${notGoing.length})</div>
+        <div style="font-size:11px;font-weight:700;color:var(--danger-text);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">✗ Not Attending (${notGoing.length})</div>
         ${notGoing.length?notGoing.map(m=>`<div style="display:flex;align-items:center;gap:6px;padding:4px 0"><div class="avatar" style="width:24px;height:24px;font-size:9px">${initials(m.name)}</div><span style="font-size:13px">${esc(m.name)}</span></div>`).join(''):'<div style="font-size:13px;color:var(--text-3)">None</div>'}
       </div>
       <div class="card" style="padding:14px">
@@ -2046,7 +2047,7 @@ window.evdRsvp = async function(evId, val) {
 
   // Update pill + buttons on the page
   const pill = document.getElementById('evd-pill');
-  if(pill) pill.innerHTML = val==='yes'?'<span class="rsvp-status-pill yes">✓ Going</span>':'<span class="rsvp-status-pill no">✗ Not going</span>';
+  if(pill) pill.innerHTML = val==='yes'?'<span class="rsvp-status-pill yes">✓ Attending</span>':'<span class="rsvp-status-pill no">✗ Not Attending</span>';
   document.getElementById('evd-yes')?.classList.toggle('selected-yes', val==='yes');
   document.getElementById('evd-no')?.classList.toggle('selected-no', val==='no');
 
@@ -2064,7 +2065,7 @@ window.evdRsvp = async function(evId, val) {
     card.classList.remove('rsvp-yes','rsvp-no','rsvp-pending');
     card.classList.add(val==='yes'?'rsvp-yes':'rsvp-no');
     const p2 = card.querySelector('.rsvp-status-pill');
-    if(p2){ p2.className='rsvp-status-pill '+(val==='yes'?'yes':'no'); p2.textContent=val==='yes'?'✓ Going':'✗ Not going'; }
+    if(p2){ p2.className='rsvp-status-pill '+(val==='yes'?'yes':'no'); p2.textContent=val==='yes'?'✓ Attending':'✗ Not Attending'; }
   }
 
   showToast(val==='yes'?'Marked as going ✓':'Marked as not going');
@@ -2332,8 +2333,8 @@ function navigatePendingRsvp() {
             ${seat?`<div class="dash-my-seat" style="margin-top:6px">🚣 Your seat: <strong>${esc(seat)}</strong></div>`:''}
           </div>
           <div class="rsvp-action-btns" onclick="event.stopPropagation()">
-            <button class="rsvp-action-btn" onclick="dashRsvp('${ev.id}','yes',this)">✓ Going</button>
-            <button class="rsvp-action-btn" onclick="dashRsvp('${ev.id}','no',this)">✗ No</button>
+            <button class="rsvp-action-btn" onclick="dashRsvp('${ev.id}','yes',this)">✓ Attending</button>
+            <button class="rsvp-action-btn" onclick="dashRsvp('${ev.id}','no',this)">✗ Not Attending</button>
           </div>
         </div>`;
       }).join('');
@@ -2452,7 +2453,7 @@ window.dashRsvp = async function(evId, val, btn) {
   const pill = card.querySelector('.rsvp-status-pill');
   if (pill) {
     pill.className = `rsvp-status-pill ${val==='yes'?'yes':val==='no'?'no':'pending'}`;
-    pill.textContent = val==='yes'?'✓ Going':val==='no'?'✗ Not going':'⏳ No reply';
+    pill.textContent = val==='yes'?'✓ Attending':val==='no'?'✗ Not Attending':'⏳ No reply';
   }
 
   // Update card border class
@@ -2563,9 +2564,9 @@ function pgFilteredEvents(typeFilter) {
           const rsvp  = (ev.rsvps||{})[uid] || '';
           const seat  = mySeat(ev.id);
           const statusPill = rsvp==='yes'
-            ? `<span class="rsvp-status-pill yes">✓ Going</span>`
+            ? `<span class="rsvp-status-pill yes">✓ Attending</span>`
             : rsvp==='no'
-            ? `<span class="rsvp-status-pill no">✗ Not going</span>`
+            ? `<span class="rsvp-status-pill no">✗ Not Attending</span>`
             : `<span class="rsvp-status-pill pending">⏳ No reply</span>`;
           const seatInfo = seat ? `<div class="dash-my-seat">🚣 Your seat: <strong>${esc(seat)}</strong></div>` : '';
           const daysUntil = Math.round((new Date(ev.date+'T12:00:00') - new Date()) / 86400000);
@@ -2599,8 +2600,8 @@ function pgFilteredEvents(typeFilter) {
               ${editBtns}
             </div>
             ${!isPast ? `<div class="rsvp-action-btns" onclick="event.stopPropagation()">
-              <button class="rsvp-action-btn ${rsvp==='yes'?'selected-yes':''}" onclick="dashRsvp('${ev.id}','yes',this)">✓ Going</button>
-              <button class="rsvp-action-btn ${rsvp==='no'?'selected-no':''}" onclick="dashRsvp('${ev.id}','no',this)">✗ No</button>
+              <button class="rsvp-action-btn ${rsvp==='yes'?'selected-yes':''}" onclick="dashRsvp('${ev.id}','yes',this)">✓ Attending</button>
+              <button class="rsvp-action-btn ${rsvp==='no'?'selected-no':''}" onclick="dashRsvp('${ev.id}','no',this)">✗ Not Attending</button>
             </div>` : ''}
           </div>`;
         }).join('');
@@ -2736,7 +2737,7 @@ function pgProfile() {
             <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Date</th>
             <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:var(--surface-alt)">Attended</th>
           </tr></thead>
-          <tbody>${recent6.map(ev=>{const r=(ev.rsvps||{})[p.uid];const pill=r==='yes'?'<span class="rsvp-status-pill yes">✓ Yes</span>':r==='no'?'<span class="rsvp-status-pill no">✗ No</span>':'<span class="rsvp-status-pill pending">— No reply</span>';return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge ${evBadgeClass(ev.type)}" style="font-size:10px">${ev.type}</span></td><td style="padding:10px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td><td style="padding:10px 16px;text-align:center">${pill}</td></tr>`;}).join('')}</tbody>
+          <tbody>${recent6.map(ev=>{const r=(ev.rsvps||{})[p.uid];const pill=r==='yes'?'<span class="rsvp-status-pill yes">✓ Yes</span>':r==='no'?'<span class="rsvp-status-pill no">✗ Not Attending</span>':'<span class="rsvp-status-pill pending">— No reply</span>';return `<tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 16px"><div style="font-weight:600">${esc(ev.name)}</div><span class="badge ${evBadgeClass(ev.type)}" style="font-size:10px">${ev.type}</span></td><td style="padding:10px 16px;font-size:13px;color:var(--text-2)">${fmtDate(ev.date)}</td><td style="padding:10px 16px;text-align:center">${pill}</td></tr>`;}).join('')}</tbody>
         </table></div>`:''}
         ${mediaHtml}
         ${notesHtml}
@@ -3264,8 +3265,11 @@ function drawBoat(evId, lineup, members) {
   body.innerHTML = `
     ${!ed?'<div class="readonly-notice">👁 View only — coaches and admins can edit the lineup.</div>':''}
     <div class="boat-visual">
-      <div class="boat-section-title">🥁 Drummer — front of boat</div>
-      ${specialSlot('drummer', members.find(m=>m.uid===lineup.drummer), 'drummer')}
+      <div class="boat-section-title" style="text-align:center">📣 Callers</div>
+      <div style="display:flex;justify-content:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        ${specialSlot('caller1', members.find(m=>m.uid===lineup.caller1), 'Caller 1')}
+        ${specialSlot('caller2', members.find(m=>m.uid===lineup.caller2), 'Caller 2')}
+      </div>
       <hr style="margin:14px 0">
       <div class="boat-section-title">🚣 Paddlers</div>
       <div style="display:grid;grid-template-columns:1fr 36px 1fr;gap:0 4px;margin-bottom:6px">
@@ -3273,8 +3277,11 @@ function drawBoat(evId, lineup, members) {
       </div>
       <div class="seat-grid">${rows}</div>
       <hr style="margin:14px 0">
-      <div class="boat-section-title">🎯 Steersperson — back of boat</div>
-      ${specialSlot('steers', members.find(m=>m.uid===lineup.steers), 'steersperson')}
+      <div class="boat-section-title" style="text-align:center">🎯 Steers</div>
+      <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+        ${specialSlot('steers1', members.find(m=>m.uid===lineup.steers1), 'Steers 1')}
+        ${specialSlot('steers2', members.find(m=>m.uid===lineup.steers2), 'Steers 2')}
+      </div>
     </div>
     ${ed ? `<div class="card" style="padding:16px 20px">
       <div style="font-size:14px;font-weight:700;margin-bottom:10px">Unassigned (${unassigned.length})</div>
@@ -3581,10 +3588,10 @@ window.openRsvpModal = function(evId) {
           <div class="avatar">${initials(m.name)}</div>
           <div class="rsvp-info"><div class="rsvp-name">${esc(m.name)}</div><div class="rsvp-sub">${esc((Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler']).join(', '))} · ${esc((Array.isArray(m.sides)?m.sides:m.side?[m.side]:[]).join('/'))||'—'}</div></div>
           ${ed?`<div class="rsvp-btns">
-            <button class="rsvp-btn ${cur==='yes'?'going':''}" onclick="setRsvp('${m.uid}','yes',this)">✓ Going</button>
-            <button class="rsvp-btn ${cur==='no'?'notgoing':''}" onclick="setRsvp('${m.uid}','no',this)">✗ No</button>
+            <button class="rsvp-btn ${cur==='yes'?'going':''}" onclick="setRsvp('${m.uid}','yes',this)">✓ Attending</button>
+            <button class="rsvp-btn ${cur==='no'?'notgoing':''}" onclick="setRsvp('${m.uid}','no',this)">✗ Not Attending</button>
             <button class="rsvp-btn" onclick="setRsvp('${m.uid}','',this)">—</button>
-          </div>`:`<span class="badge ${cur==='yes'?'badge-yes':cur==='no'?'badge-no':''}">${cur==='yes'?'Going':cur==='no'?'Not going':'No reply'}</span>`}
+          </div>`:`<span class="badge ${cur==='yes'?'badge-yes':cur==='no'?'badge-no':''}">${cur==='yes'?'Going':cur==='no'?'Not Attending':'No reply'}</span>`}
         </div>`; }).join('')}
       </div>
       <div class="modal-footer"><button class="btn" onclick="closeModal()">${ed?'Cancel':'Close'}</button>${ed?`<button class="btn btn-primary" onclick="saveRsvps('${evId}')">Save RSVPs</button>`:''}</div>
