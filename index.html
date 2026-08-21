@@ -4494,11 +4494,90 @@ function loadRaceDayDetail(raceId) {
     db.ref('raceHeats/'+raceId).get(),
     db.ref('users').get(),
     db.ref('settings/liveResultsUrl').get(),
-  ]).then(([evSnap,heatSnap,uSnap,lrSnap])=>{
+    db.ref('lineups/'+raceId).get(),
+  ]).then(([evSnap,heatSnap,uSnap,lrSnap,lineupSnap])=>{
     const ev=evSnap.val(); if(!ev)return;
-    const heats=Object.entries(heatSnap.val()||{}).sort((a,b)=>a[1].order-b[1].order);
-    const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&(ev.rsvps||{})[u.uid]==='yes').sort((a,b)=>a.name.localeCompare(b.name));
-    const liveUrl = lrSnap.val()||'';
+    const heats=Object.entries(heatSnap.val()||{}).sort((a,b)=>Number(a[1].order||0)-Number(b[1].order||0));
+    const allMembers=Object.values(uSnap.val()||{}).filter(u=>u.approved);
+    const members=allMembers.filter(u=>(ev.rsvps||{})[u.uid]==='yes').sort((a,b)=>a.name.localeCompare(b.name));
+    const liveUrl=lrSnap.val()||'';
+    const lineup=lineupSnap.val()||{};
+
+    // Build lineup display — callers, paddlers by row, steers
+    function memberName(uid) {
+      if (!uid) return null;
+      const m = allMembers.find(u=>u.uid===uid);
+      return m ? m.name : null;
+    }
+    function seatChip(uid, label) {
+      const name = memberName(uid);
+      return name
+        ? `<div style="display:flex;align-items:center;gap:6px;background:var(--accent-bg);border:1px solid var(--accent);border-radius:20px;padding:4px 10px 4px 6px;flex-shrink:0">
+            <div class="avatar" style="width:22px;height:22px;font-size:9px;flex-shrink:0">${initials(name)}</div>
+            <span style="font-size:12px;font-weight:600;color:var(--accent-text)">${esc(name)}</span>
+          </div>`
+        : `<div style="font-size:12px;color:var(--text-3);padding:4px 10px;border:1px dashed var(--border);border-radius:20px">${label}: empty</div>`;
+    }
+
+    const boatType = ev.boatType || 20;
+    const ROWS = {10:5,20:10,24:12}[boatType] || 10;
+    const boatCount = ev.boatCount || 1;
+
+    function buildBoatSection(boatNum) {
+      const path = boatNum === 1 ? '' : '_boat'+boatNum;
+      const lu = boatNum === 1 ? lineup : (lineupSnap.val()||{}); // already fetched as lineups/{raceId}
+      // For multi-boat, we'd need separate fetches — use what we have
+      const l = boatNum === 1 ? lineup : {};
+
+      const caller1 = l.caller1; const caller2 = l.caller2;
+      const steers1 = l.steers1; const steers2 = l.steers2;
+
+      let rowsHtml = '';
+      for (let r=1; r<=ROWS; r++) {
+        const lUid = l[`row${r}_left`];
+        const rUid = l[`row${r}_right`];
+        const lName = memberName(lUid);
+        const rName = memberName(rUid);
+        rowsHtml += `<div style="display:contents">
+          <div style="padding:3px 6px;background:${lName?'var(--surface-alt)':'transparent'};border-radius:6px;font-size:12px;text-align:right;border:1px solid ${lName?'var(--border)':'var(--border)'};min-height:28px;display:flex;align-items:center;justify-content:flex-end">
+            ${lName?`<span>${esc(lName)}</span><div class="avatar" style="width:20px;height:20px;font-size:8px;margin-left:4px">${initials(lName)}</div>`:'<span style="color:var(--text-3);font-size:11px">—</span>'}
+          </div>
+          <div style="text-align:center;font-size:10px;font-weight:700;color:var(--text-3);display:flex;align-items:center;justify-content:center">${r}</div>
+          <div style="padding:3px 6px;background:${rName?'var(--surface-alt)':'transparent'};border-radius:6px;font-size:12px;border:1px solid var(--border);min-height:28px;display:flex;align-items:center">
+            ${rName?`<div class="avatar" style="width:20px;height:20px;font-size:8px;margin-right:4px">${initials(rName)}</div><span>${esc(rName)}</span>`:'<span style="color:var(--text-3);font-size:11px">—</span>'}
+          </div>
+        </div>`;
+      }
+
+      return `
+        <div style="margin-bottom:${boatCount>1?'16px':'0'}">
+          ${boatCount>1?`<div style="font-size:13px;font-weight:700;margin-bottom:8px">🚣 Boat ${boatNum}</div>`:''}
+          <div style="text-align:center;margin-bottom:8px">
+            <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;margin-bottom:4px">📣 Callers</div>
+            <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap">
+              ${seatChip(caller1,'Caller 1')} ${seatChip(caller2,'Caller 2')}
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 24px 1fr;gap:3px 4px;margin:8px 0;font-size:10px;font-weight:700;color:var(--text-3);text-align:center">
+            <div>LEFT</div><div></div><div>RIGHT</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 24px 1fr;gap:3px 4px">${rowsHtml}</div>
+          <div style="text-align:center;margin-top:8px">
+            <div style="font-size:11px;font-weight:700;color:var(--text-3);text-transform:uppercase;margin-bottom:4px">🎯 Steers</div>
+            <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap">
+              ${seatChip(steers1,'Steers 1')} ${seatChip(steers2,'Steers 2')}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    const hasLineup = Object.keys(lineup).length > 0;
+    const lineupSection = hasLineup ? `
+      <div class="card" style="padding:18px;margin-bottom:16px">
+        <div style="font-size:15px;font-weight:700;margin-bottom:14px">📋 Lineup${boatCount>1?' (Boat 1)':''}</div>
+        ${buildBoatSection(1)}
+      </div>` : '';
+
     const detail=document.createElement('div'); detail.id='rd-detail';
     detail.innerHTML=`
       <div class="metric-grid" style="margin-bottom:20px">
@@ -4519,6 +4598,8 @@ function loadRaceDayDetail(raceId) {
         <button class="btn btn-primary btn-sm" onclick="saveLiveResultsToRace('${raceId}')">Save results</button>
       </div>` : ''}
 
+      ${lineupSection}
+
       ${heats.length?heats.map(([hk,h])=>`
         <div class="card" style="padding:20px;margin-bottom:14px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
@@ -4529,6 +4610,8 @@ function loadRaceDayDetail(raceId) {
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
               ${h.result?`<span class="badge" style="background:var(--success-bg);color:var(--success-text);font-size:13px">🏆 ${esc(h.result)}</span>`:''}
               ${h.time_recorded?`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);font-size:12px">⏱ ${esc(h.time_recorded)}</span>`:''}
+              ${h.steers1||h.steers2?`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);font-size:12px">🎯 ${[h.steers1,h.steers2].filter(Boolean).join(' & ')}</span>`:''}
+              ${h.caller1||h.caller2?`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);font-size:12px">📣 ${[h.caller1,h.caller2].filter(Boolean).join(' & ')}</span>`:''}
               ${can.edit()?`<button class="btn btn-sm btn-ghost" onclick="openHeatModal('${raceId}','${hk}')">Edit</button>
               <button class="btn btn-sm btn-danger btn-ghost" onclick="deleteHeat('${raceId}','${hk}')">✕</button>`:''}
             </div>
@@ -6267,6 +6350,13 @@ window.saveLiveResultsToRace = async function(raceId) {
     const existing = existingSnap.val() || {};
     const existingHeatNums = new Set(Object.values(existing).map(h => String(h.heatNumber)));
 
+    // Fetch lineup to save steers/callers into each heat
+    const lineupSnap = await db.ref('lineups/'+targetRaceId).get();
+    const lineup = lineupSnap.val() || {};
+    const allUsersSnap = await db.ref('users').get();
+    const allUsers = Object.values(allUsersSnap.val()||{});
+    function uidToName(uid) { return uid ? (allUsers.find(u=>u.uid===uid)?.name||'') : ''; }
+
     let saved = 0;
     for (const race of ourHeats) {
       if (existingHeatNums.has(String(race.heat))) continue;
@@ -6291,6 +6381,10 @@ window.saveLiveResultsToRace = async function(raceId) {
         allResults:     JSON.stringify(sorted),
         savedAt:        Date.now(),
         sourceUrl:      url,
+        caller1:        uidToName(lineup.caller1),
+        caller2:        uidToName(lineup.caller2),
+        steers1:        uidToName(lineup.steers1),
+        steers2:        uidToName(lineup.steers2),
       });
       saved++;
     }
