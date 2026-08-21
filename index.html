@@ -1742,6 +1742,7 @@ window.openEventDetail = function(evId, domEvent) {
 
     // Default tab — Lineup for practices, RSVP for everything else
     const defaultTab = ev.type === 'Practice' ? 'lineup' : 'rsvp';
+    const C = document.getElementById('pg-content');
     C.innerHTML = `
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px">
         <span class="badge ${evBadgeClass(ev.type)}" style="font-size:13px">${ev.type}</span>
