@@ -6424,11 +6424,12 @@ window.saveLiveResultsToRace = async function(raceId) {
 
 // ── Lineup drag-and-drop ──────────────────────────────────────────────────────
 function initLineupDrag(evId, body) {
-  const seats = body.querySelectorAll('.seat-slot.filled.editable');
+  const seats   = body.querySelectorAll('.seat-slot.filled.editable');
   const targets = body.querySelectorAll('.seat-slot.editable');
 
-  let dragKey = null;  // key of seat being dragged
+  let dragKey = null;
 
+  // ── Mouse / desktop drag-and-drop ──────────────────────────────────────────
   seats.forEach(el => {
     el.setAttribute('draggable', 'true');
     el.style.cursor = 'grab';
@@ -6437,57 +6438,132 @@ function initLineupDrag(evId, body) {
       dragKey = el.dataset.key;
       el.classList.add('drag-source');
       e.dataTransfer.effectAllowed = 'move';
-      // Needed for Firefox
       e.dataTransfer.setData('text/plain', dragKey);
     });
 
     el.addEventListener('dragend', () => {
       dragKey = null;
-      body.querySelectorAll('.seat-slot').forEach(s => {
-        s.classList.remove('drag-source', 'drag-over');
-      });
+      body.querySelectorAll('.seat-slot').forEach(s => s.classList.remove('drag-source','drag-over'));
     });
   });
 
   targets.forEach(el => {
     el.addEventListener('dragover', e => {
-      if (!dragKey) return;
-      if (el.dataset.key === dragKey) return; // same seat
+      if (!dragKey || el.dataset.key === dragKey) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
       el.classList.add('drag-over');
     });
-
-    el.addEventListener('dragleave', () => {
-      el.classList.remove('drag-over');
-    });
-
-    el.addEventListener('drop', async e => {
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', e => {
       e.preventDefault();
       el.classList.remove('drag-over');
-      const fromKey = dragKey;
-      const toKey   = el.dataset.key;
-      if (!fromKey || fromKey === toKey) return;
-
-      // Swap the two seats in Firebase
-      const path = lineupPath(evId);
-      const snap = await db.ref(path).get();
-      const current = snap.val() || {};
-      const fromUid = current[fromKey] || null;
-      const toUid   = current[toKey]   || null;
-
-      const update = {};
-      if (fromUid) update[toKey]   = fromUid;
-      else          update[toKey]   = null;
-      if (toUid)   update[fromKey] = toUid;
-      else          update[fromKey] = null;
-
-      await db.ref(path).update(update);
-      // Re-render lineup after swap
-      const d = window._evPage;
-      if (d) renderEvDetailLineup(d.evId, d.ev, d.members, { ...d.lineup, ...update });
+      performSwap(evId, dragKey, el.dataset.key, body);
     });
   });
+
+  // ── Touch layer for iOS Safari ──────────────────────────────────────────────
+  let touchDragKey  = null;
+  let touchClone    = null;   // floating ghost element
+  let touchOffsetX  = 0;
+  let touchOffsetY  = 0;
+
+  seats.forEach(el => {
+    el.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      touchDragKey = el.dataset.key;
+
+      // Create a visual ghost that follows the finger
+      touchClone = el.cloneNode(true);
+      const r = el.getBoundingClientRect();
+      touchOffsetX = touch.clientX - r.left;
+      touchOffsetY = touch.clientY - r.top;
+      touchClone.style.cssText = `
+        position:fixed;z-index:9999;pointer-events:none;opacity:0.85;
+        width:${r.width}px;left:${touch.clientX - touchOffsetX}px;top:${touch.clientY - touchOffsetY}px;
+        box-shadow:0 8px 24px rgba(0,0,0,0.25);border-radius:var(--radius);
+        background:var(--surface);border:2px solid var(--accent);
+      `;
+      document.body.appendChild(touchClone);
+      el.classList.add('drag-source');
+      e.preventDefault(); // prevent scroll during drag
+    }, { passive: false });
+
+    el.addEventListener('touchmove', e => {
+      if (!touchDragKey || !touchClone) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+
+      // Move the ghost
+      touchClone.style.left = (touch.clientX - touchOffsetX) + 'px';
+      touchClone.style.top  = (touch.clientY - touchOffsetY) + 'px';
+
+      // Find which seat slot is under the finger
+      touchClone.style.display = 'none'; // hide ghost so elementFromPoint works
+      const under = document.elementFromPoint(touch.clientX, touch.clientY);
+      touchClone.style.display = '';
+
+      body.querySelectorAll('.seat-slot').forEach(s => s.classList.remove('drag-over'));
+      const targetSlot = under?.closest('.seat-slot.editable');
+      if (targetSlot && targetSlot.dataset.key !== touchDragKey) {
+        targetSlot.classList.add('drag-over');
+      }
+    }, { passive: false });
+
+    el.addEventListener('touchend', e => {
+      if (!touchDragKey) return;
+      const touch = e.changedTouches[0];
+
+      // Clean up ghost and highlights
+      touchClone?.remove();
+      touchClone = null;
+      body.querySelectorAll('.seat-slot').forEach(s => s.classList.remove('drag-source','drag-over'));
+
+      // Find drop target
+      const under = document.elementFromPoint(touch.clientX, touch.clientY);
+      const targetSlot = under?.closest('.seat-slot.editable');
+      const toKey = targetSlot?.dataset.key;
+
+      if (toKey && toKey !== touchDragKey) {
+        performSwap(evId, touchDragKey, toKey, body);
+      }
+      touchDragKey = null;
+    });
+
+    el.addEventListener('touchcancel', () => {
+      touchClone?.remove();
+      touchClone = null;
+      touchDragKey = null;
+      body.querySelectorAll('.seat-slot').forEach(s => s.classList.remove('drag-source','drag-over'));
+    });
+  });
+
+  // ── Shared swap logic (used by both mouse and touch) ───────────────────────
+  async function performSwap(evId, fromKey, toKey, body) {
+    if (!fromKey || !toKey || fromKey === toKey) return;
+
+    const path = lineupPath(evId);
+    const snap = await db.ref(path).get();
+    const current = snap.val() || {};
+    const fromUid = current[fromKey] || null;
+    const toUid   = current[toKey]   || null;
+
+    if (!fromUid) return;
+
+    const update = {};
+    update[toKey]   = fromUid;
+    update[fromKey] = toUid || null;
+
+    await db.ref(path).update(update);
+
+    const d = window._evPage;
+    if (!d) return;
+    const freshSnap = await db.ref(lineupPath(d.evId)).get();
+    const freshLineup = freshSnap.val() || {};
+    d.lineup = freshLineup;
+    renderEvDetailLineup(d.evId, d.ev, d.members, freshLineup);
+  }
 }
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
