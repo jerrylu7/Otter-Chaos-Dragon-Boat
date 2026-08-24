@@ -400,6 +400,10 @@ tbody tr:hover td { background: var(--surface-alt); }
 .seat-slot.editable:hover { border-color: var(--accent); background: var(--accent-bg); }
 .seat-slot.filled { border-style: solid; border-color: var(--border); background: var(--surface); }
 .seat-slot.filled.editable:hover { border-color: var(--accent); }
+.seat-slot.drag-source { opacity: 0.35; transform: scale(0.97); }
+.seat-slot.drag-over { border: 2px dashed var(--accent) !important; background: var(--accent-bg) !important; transform: scale(1.02); }
+.seat-slot[draggable="true"] { cursor: grab; }
+.seat-slot[draggable="true"]:active { cursor: grabbing; }
 .seat-slot-center { min-width: 200px; max-width: 300px; justify-content: center; }
 .seat-slot .seat-name  { font-weight: 700; font-size: 13px; }
 .seat-slot .seat-sub   { font-size: 10px; color: var(--text-3); }
@@ -1954,7 +1958,7 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
     const warnStyle = memberUid && !isGoing ? 'border-color:var(--warning);background:var(--warning-bg)' : '';
     const style = isMe ? 'background:var(--accent-bg);border-color:var(--accent)' : warnStyle;
     const click = ed ? `onclick="evdPickSeat('${evId}','${key}')"` : '';
-    return `<div class="seat-slot${name?' filled':''}${ed?' editable':''}${(key==='drummer'||key==='steers')?' seat-slot-center':''}" ${click} style="${style};min-height:40px">
+    return `<div class="seat-slot${name?' filled':''}${ed?' editable':''}${(key==='drummer'||key==='steers')?' seat-slot-center':''}" data-key="${key}" ${click} style="${style};min-height:40px">
       ${name
         ? `<div class="avatar" style="width:22px;height:22px;font-size:9px;${memberUid&&!isGoing?'background:var(--warning-bg);color:var(--warning-text)':''}">${initials(name)}</div>
            <div style="flex:1;min-width:0">
@@ -2034,6 +2038,9 @@ function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatTy
         </div>
       </div>
     </div>`;
+
+  // ── Drag-and-drop seat swapping ─────────────────────────────────────────────
+  if (ed) setTimeout(() => initLineupDrag(evId, body), 0);
 }
 
 window.evDetailTab = function(tab, evId) {
@@ -6414,6 +6421,74 @@ window.saveLiveResultsToRace = async function(raceId) {
     if (btn) { btn.disabled = false; btn.textContent = 'Save results'; }
   }
 };
+
+// ── Lineup drag-and-drop ──────────────────────────────────────────────────────
+function initLineupDrag(evId, body) {
+  const seats = body.querySelectorAll('.seat-slot.filled.editable');
+  const targets = body.querySelectorAll('.seat-slot.editable');
+
+  let dragKey = null;  // key of seat being dragged
+
+  seats.forEach(el => {
+    el.setAttribute('draggable', 'true');
+    el.style.cursor = 'grab';
+
+    el.addEventListener('dragstart', e => {
+      dragKey = el.dataset.key;
+      el.classList.add('drag-source');
+      e.dataTransfer.effectAllowed = 'move';
+      // Needed for Firefox
+      e.dataTransfer.setData('text/plain', dragKey);
+    });
+
+    el.addEventListener('dragend', () => {
+      dragKey = null;
+      body.querySelectorAll('.seat-slot').forEach(s => {
+        s.classList.remove('drag-source', 'drag-over');
+      });
+    });
+  });
+
+  targets.forEach(el => {
+    el.addEventListener('dragover', e => {
+      if (!dragKey) return;
+      if (el.dataset.key === dragKey) return; // same seat
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('drag-over');
+    });
+
+    el.addEventListener('dragleave', () => {
+      el.classList.remove('drag-over');
+    });
+
+    el.addEventListener('drop', async e => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      const fromKey = dragKey;
+      const toKey   = el.dataset.key;
+      if (!fromKey || fromKey === toKey) return;
+
+      // Swap the two seats in Firebase
+      const path = lineupPath(evId);
+      const snap = await db.ref(path).get();
+      const current = snap.val() || {};
+      const fromUid = current[fromKey] || null;
+      const toUid   = current[toKey]   || null;
+
+      const update = {};
+      if (fromUid) update[toKey]   = fromUid;
+      else          update[toKey]   = null;
+      if (toUid)   update[fromKey] = toUid;
+      else          update[fromKey] = null;
+
+      await db.ref(path).update(update);
+      // Re-render lineup after swap
+      const d = window._evPage;
+      if (d) renderEvDetailLineup(d.evId, d.ev, d.members, { ...d.lineup, ...update });
+    });
+  });
+}
 
 // ─── Start ─────────────────────────────────────────────────────────────────────
 initApp();
