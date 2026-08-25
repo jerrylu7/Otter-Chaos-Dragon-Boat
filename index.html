@@ -399,6 +399,8 @@ applyLogo(url);
 });
 if (can.edit()) checkAndSendAutoReminders();
 const p = currentProfile;
+// Firebase sometimes returns arrays as objects {0:'Left',1:'Right'} — normalise
+if (p.sides && !Array.isArray(p.sides)) p.sides = Object.values(p.sides);
 const sidesOk = Array.isArray(p.sides) && p.sides.length > 0;
 const weightOk = p.weight && String(p.weight).trim() !== '';
 const emergOk = p.emergency && String(p.emergency).trim() !== '';
@@ -4981,8 +4983,13 @@ function showProfileCompletionScreen() {
 hideSplash();
 document.getElementById('app').style.display = 'block';
 document.getElementById('auth-screen').style.display = 'none';
-const content = document.getElementById('content');
-content.innerHTML = `
+// navigate sets up the page shell (topbar, pg-content div etc)
+navigate('dashboard');
+// Small delay so the shell renders before we overwrite pg-content
+setTimeout(() => {
+const C = document.getElementById('pg-content');
+if (!C) return;
+C.innerHTML = `
 <div style="max-width:480px;margin:48px auto;padding:0 16px">
 <div class="card" style="padding:28px">
 <div style="text-align:center;margin-bottom:24px">
@@ -5020,6 +5027,7 @@ Save and continue →
 </button>
 </div>
 </div>`;
+}, 50);
 }
 window.gateUpdateSideLabel = function(side) {
 const checked = document.getElementById('gate-side-'+side)?.checked;
