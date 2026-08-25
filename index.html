@@ -3702,24 +3702,22 @@ ${can.edit()?`<div style="max-width:720px;margin-top:24px">
 </div>
 <div style="max-width:600px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border)">
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-<div class="dash-section-title" style="margin:0">🏅 Coach schedule</div>
+<div class="dash-section-title" style="margin:0">📅 Coach schedule</div>
 <span style="font-size:12px;color:var(--text-3)">🔒 Coaches &amp; admins only</span>
 </div>
 <div class="card" style="padding:20px;margin-bottom:14px">
-<div style="font-size:13px;color:var(--text-2);margin-bottom:14px">Log when a coach is <strong>available</strong> or <strong>unavailable</strong> to run sessions.</div>
-<div class="form-grid-2" style="margin-bottom:10px">
-<div class="form-group" style="margin-bottom:0"><label class="form-label">Coach</label>
-<select id="cs-coach">${members.filter(m=>m.role==='coach'||m.role==='admin').map(m=>`<option value="${m.uid}">${esc(m.name)}</option>`).join('')}</select></div>
-<div class="form-group" style="margin-bottom:0"><label class="form-label">Status</label>
-<select id="cs-type"><option value="available">✅ Available</option><option value="unavailable">🚫 Unavailable</option></select></div>
+<div style="font-size:13px;color:var(--text-2);margin-bottom:14px">Paste a Google Calendar iCal URL to sync a coach's schedule automatically.</div>
+<div class="form-group">
+<label class="form-label">Coach</label>
+<select id="cs-coach">${members.filter(m=>m.role==='coach'||m.role==='admin').map(m=>`<option value="${m.uid}|${esc(m.name)}">${esc(m.name)}</option>`).join('')}</select>
 </div>
-<div class="form-grid-2" style="margin-bottom:10px">
-<div class="form-group" style="margin-bottom:0"><label class="form-label">From *</label><input type="date" id="cs-from"></div>
-<div class="form-group" style="margin-bottom:0"><label class="form-label">Until *</label><input type="date" id="cs-to"></div>
+<div class="form-group">
+<label class="form-label">Google Calendar iCal URL</label>
+<input id="cs-ical-url" type="url" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
+<div style="font-size:11px;color:var(--text-3);margin-top:5px">Google Calendar → Settings → your calendar → Integrate calendar → <strong>Secret address in iCal format</strong></div>
 </div>
-<div class="form-group"><label class="form-label">Note (optional)</label>
-<input id="cs-note" placeholder="e.g. Away for tournament, mornings only…"></div>
-<button class="btn btn-primary" onclick="addCoachSchedule()">Save</button>
+<button class="btn btn-primary" onclick="syncCoachCalendar()">Sync calendar</button>
+<div id="cs-sync-msg" style="display:none;margin-top:10px"></div>
 </div>
 <div id="cs-list"></div>
 </div>`:''}`;
@@ -3751,39 +3749,67 @@ const entries=Object.entries(schedule).filter(([,e])=>e.to>=now).sort((a,b)=>a[1
 if(!entries.length){el.innerHTML='<div style="color:var(--text-3);font-size:13px;padding:8px 0">No coach schedule entries yet.</div>';return;}
 el.innerHTML=entries.map(([key,e])=>{
 const coachName=members&&members.find(m=>m.uid===e.coachUid)&&members.find(m=>m.uid===e.coachUid).name||e.coachName||'Coach';
-const isAvail=e.type==='available';
-const bg=isAvail?'var(--success-bg)':'var(--danger-bg)';
-const fg=isAvail?'var(--success-text)':'var(--danger-text)';
-const statusLabel=isAvail?'✅ Available':'🚫 Unavailable';
-return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;flex-wrap:wrap">'
-+'<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">'
-+'<span class="avatar" style="width:26px;height:26px;font-size:10px">'+initials(coachName)+'</span>'
-+'<span style="font-weight:700;font-size:14px">'+esc(coachName)+'</span>'
-+'<span class="badge" style="background:'+bg+';color:'+fg+'">'+statusLabel+'</span>'
+const isCal=e.fromCalSync;
+const badge=isCal?'<span class=\"badge\" style=\"background:var(--race-bg);color:var(--race-text)\">📅 From calendar</span>'
+  :(e.type==='available'?'<span class=\"badge\" style=\"background:var(--success-bg);color:var(--success-text)\">✅ Available</span>'
+  :'<span class=\"badge\" style=\"background:var(--danger-bg);color:var(--danger-text)\">🚫 Unavailable</span>');
+return '<div style=\"display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;flex-wrap:wrap\">'
++'<div><div style=\"display:flex;align-items:center;gap:8px;margin-bottom:3px\">'
++'<span class=\"avatar\" style=\"width:26px;height:26px;font-size:10px\">'+initials(coachName)+'</span>'
++'<span style=\"font-weight:700;font-size:14px\">'+esc(coachName)+'</span>'
++badge
 +'</div><div style="font-size:13px;color:var(--text-2)">📅 '+fmtDate(e.from)+' → '+fmtDate(e.to)+(e.note?' — '+esc(e.note):'')+' </div></div>'
 +'<button class="btn btn-sm btn-ghost btn-danger" onclick="deleteCoachSchedule(\'' +key+ '\')">&#10005;</button></div>';
 }).join('');
 }
 
-window.addCoachSchedule=async function(){
-const coachUid=document.getElementById('cs-coach')?.value;
-const type=document.getElementById('cs-type')?.value||'available';
-const from=document.getElementById('cs-from')?.value;
-const to=document.getElementById('cs-to')?.value;
-const note=document.getElementById('cs-note')?.value?.trim()||'';
-if(!from||!to){showToast('Start and end date required','⚠️');return;}
-if(to<from){showToast('End date must be after start','⚠️');return;}
-const uSnap=await db.ref('users/'+coachUid).get();
-const coachName=uSnap.val()?.name||'Coach';
-const key=db.ref('coachSchedule').push().key;
-await db.ref('coachSchedule/'+key).set({coachUid,coachName,type,from,to,note,addedBy:currentProfile.name,addedAt:Date.now()});
-showToast('Coach schedule saved ✓');
-document.getElementById('cs-from').value='';
-document.getElementById('cs-to').value='';
-document.getElementById('cs-note').value='';
+window.syncCoachCalendar=async function(){
+const raw=document.getElementById('cs-coach')?.value||'';
+const [coachUid,coachName]=raw.split('|');
+const icalUrl=document.getElementById('cs-ical-url')?.value?.trim();
+const msgEl=document.getElementById('cs-sync-msg');
+function msg(text,ok){msgEl.style.display='';msgEl.className='msg '+(ok?'msg-ok':'msg-warn');msgEl.textContent=text;}
+if(!coachUid){msg('Please select a coach.');return;}
+if(!icalUrl){msg('Please paste a Google Calendar iCal URL.');return;}
+if(!icalUrl.includes('.ics')&&!icalUrl.includes('calendar.google.com')){msg('URL must be a valid iCal (.ics) feed.');return;}
+const btn=document.querySelector('#cs-sync-msg').previousElementSibling;
+if(btn){btn.disabled=true;btn.textContent='Syncing…';}
+try{
+// Save the URL for this coach
+await db.ref('coachCalendarUrls/'+coachUid).set({url:icalUrl,coachName:coachName||'Coach',updatedAt:Date.now()});
+// Call Cloud Function to fetch and parse the feed
+const fnUrl='https://us-central1-'+FIREBASE_CONFIG.projectId+'.cloudfunctions.net/fetchCalendarFeed?url='+encodeURIComponent(icalUrl);
+const res=await fetch(fnUrl);
+const data=await res.json();
+if(data.error)throw new Error(data.error);
+// Clear previous entries for this coach
 const csSnap=await db.ref('coachSchedule').get();
+const existing=csSnap.val()||{};
+const toDelete=Object.entries(existing).filter(([,e])=>e.coachUid===coachUid&&e.fromCalSync).map(([k])=>k);
+const delUpdates={};
+toDelete.forEach(k=>{delUpdates[k]=null;});
+if(Object.keys(delUpdates).length)await db.ref('coachSchedule').update(delUpdates);
+// Write new entries from calendar
+for(const ev of data.events){
+const key=db.ref('coachSchedule').push().key;
+await db.ref('coachSchedule/'+key).set({
+coachUid,coachName:coachName||'Coach',
+type:'busy',
+from:ev.startDate,to:ev.endDate,
+note:ev.summary,
+fromCalSync:true,
+syncedAt:Date.now()
+});
+}
+msg('✓ Synced '+data.events.length+' upcoming event'+(data.events.length!==1?'s':'')+' from Google Calendar',true);
+const csSnap2=await db.ref('coachSchedule').get();
 const uAll=await db.ref('users').get();
-renderCoachScheduleList(csSnap.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
+renderCoachScheduleList(csSnap2.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
+}catch(e){
+msg('Could not sync: '+e.message);
+}finally{
+if(btn){btn.disabled=false;btn.textContent='Sync calendar';}
+}
 };
 
 window.deleteCoachSchedule=async function(key){
@@ -3792,7 +3818,7 @@ showToast('Removed','🗑');
 const csSnap=await db.ref('coachSchedule').get();
 const uAll=await db.ref('users').get();
 renderCoachScheduleList(csSnap.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
-};
+}
 
 function renderAvailabilityList(avail,uid,containerId,canDelete) {
 const el=document.getElementById(containerId); if(!el)return;
@@ -4711,6 +4737,10 @@ const SECURE_FIREBASE_RULES = `{
 ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
 },
 "coachSchedule": {
+".read": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'",
+".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
+},
+"coachCalendarUrls": {
 ".read": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'",
 ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
 },
