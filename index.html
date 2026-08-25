@@ -3672,26 +3672,22 @@ window.deleteHeat=async function(raceId,heatKey){if(!confirm('Delete this heat?'
 function pgAvailability() {
 const C=document.getElementById('pg-content');
 const uid=currentUser.uid;
-Promise.all([db.ref('availability/'+uid).get(),db.ref('users').get()]).then(([avSnap,uSnap])=>{
+Promise.all([
+  db.ref('availability/'+uid).get(),
+  db.ref('users').get(),
+  db.ref('coachSchedule').get(),
+]).then(([avSnap,uSnap,csSnap])=>{
 const avail=avSnap.val()||{};
 const members=can.edit()?Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name)):[];
+const coachSchedule=csSnap.val()||{};
 C.innerHTML=`
 <div class="card" style="padding:20px;margin-bottom:16px;max-width:600px">
 <div style="font-size:15px;font-weight:700;margin-bottom:4px">Mark your unavailability</div>
-<div style="font-size:13px;color:var(--text-3);margin-bottom:16px">Coaches can see when you're away when planning lineups.</div>
-<div class="form-group">
-<label class="form-label">Away from *</label>
-<input type="date" id="av-from" value="">
-</div>
-<div class="form-group">
-<label class="form-label">Away until *</label>
-<input type="date" id="av-to" value="">
-</div>
-<div class="form-group">
-<label class="form-label">Reason (optional)</label>
-<input id="av-reason" placeholder="Vacation, injury, work…">
-</div>
-<button class="btn btn-primary" onclick="addAvailability('${uid}')">Add unavailability</button>
+<div style="font-size:13px;color:var(--text-3);margin-bottom:16px">Coaches can see when you\'re away when planning lineups.</div>
+<div class="form-group"><label class="form-label">Away from *</label><input type="date" id="av-from" value=""></div>
+<div class="form-group"><label class="form-label">Away until *</label><input type="date" id="av-to" value=""></div>
+<div class="form-group"><label class="form-label">Reason (optional)</label><input id="av-reason" placeholder="Vacation, injury, work…"></div>
+<button class="btn btn-primary" onclick="addAvailability(\'${uid}\')">Add unavailability</button>
 </div>
 <div style="max-width:600px">
 <div class="dash-section-title">My unavailable periods</div>
@@ -3700,6 +3696,29 @@ C.innerHTML=`
 ${can.edit()?`<div style="max-width:720px;margin-top:24px">
 <div class="dash-section-title">Team availability overview</div>
 <div id="av-team-list"></div>
+</div>
+<div style="max-width:600px;margin-top:28px;padding-top:16px;border-top:1px solid var(--border)">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+<div class="dash-section-title" style="margin:0">🏅 Coach schedule</div>
+<span style="font-size:12px;color:var(--text-3)">🔒 Coaches &amp; admins only</span>
+</div>
+<div class="card" style="padding:20px;margin-bottom:14px">
+<div style="font-size:13px;color:var(--text-2);margin-bottom:14px">Log when a coach is <strong>available</strong> or <strong>unavailable</strong> to run sessions.</div>
+<div class="form-grid-2" style="margin-bottom:10px">
+<div class="form-group" style="margin-bottom:0"><label class="form-label">Coach</label>
+<select id="cs-coach">${members.filter(m=>m.role==='coach'||m.role==='admin').map(m=>`<option value="${m.uid}">${esc(m.name)}</option>`).join('')}</select></div>
+<div class="form-group" style="margin-bottom:0"><label class="form-label">Status</label>
+<select id="cs-type"><option value="available">✅ Available</option><option value="unavailable">🚫 Unavailable</option></select></div>
+</div>
+<div class="form-grid-2" style="margin-bottom:10px">
+<div class="form-group" style="margin-bottom:0"><label class="form-label">From *</label><input type="date" id="cs-from"></div>
+<div class="form-group" style="margin-bottom:0"><label class="form-label">Until *</label><input type="date" id="cs-to"></div>
+</div>
+<div class="form-group"><label class="form-label">Note (optional)</label>
+<input id="cs-note" placeholder="e.g. Away for tournament, mornings only…"></div>
+<button class="btn btn-primary" onclick="addCoachSchedule()">Save</button>
+</div>
+<div id="cs-list"></div>
 </div>`:''}`;
 renderAvailabilityList(avail, uid, 'av-my-list', true);
 if(can.edit()){
@@ -3711,16 +3730,67 @@ Object.entries(allAv).forEach(([mUid,periods])=>{
 const m=members.find(x=>x.uid===mUid); if(!m)return;
 const upcoming=Object.entries(periods||{}).filter(([,p])=>p.to>=now).sort((a,b)=>a[1].from.localeCompare(b[1].from));
 if(!upcoming.length)return;
-html+=`<div style="margin-bottom:12px"><div style="font-weight:600;font-size:14px;margin-bottom:4px">${esc(m.name)}</div>
-${upcoming.map(([,p])=>`<div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;font-size:13px;margin-bottom:4px">
-📅 ${fmtDate(p.from)} → ${fmtDate(p.to)}${p.reason?' — '+esc(p.reason):''}
-</div>`).join('')}</div>`;
+const upHtml=upcoming.map(([,p])=>'<div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;font-size:13px;margin-bottom:4px">\uD83D\uDCC5 '+fmtDate(p.from)+' \u2192 '+fmtDate(p.to)+(p.reason?' \u2014 '+esc(p.reason):'')+' </div>').join('');
+html+='<div style="margin-bottom:12px"><div style="font-weight:600;font-size:14px;margin-bottom:4px">'+esc(m.name)+'</div>'+upHtml+'</div>';
 });
-document.getElementById('av-team-list').innerHTML=html||'<div style="color:var(--text-3);font-size:13px">No upcoming unavailability reported.</div>';
+const el=document.getElementById('av-team-list');
+if(el) el.innerHTML=html||'<div style="color:var(--text-3);font-size:13px">No upcoming unavailability reported.</div>';
 });
+renderCoachScheduleList(coachSchedule, members);
 }
 });
 }
+
+function renderCoachScheduleList(schedule, members) {
+const el=document.getElementById('cs-list'); if(!el) return;
+const now=today();
+const entries=Object.entries(schedule).filter(([,e])=>e.to>=now).sort((a,b)=>a[1].from.localeCompare(b[1].from));
+if(!entries.length){el.innerHTML='<div style="color:var(--text-3);font-size:13px;padding:8px 0">No coach schedule entries yet.</div>';return;}
+el.innerHTML=entries.map(([key,e])=>{
+const coachName=members&&members.find(m=>m.uid===e.coachUid)&&members.find(m=>m.uid===e.coachUid).name||e.coachName||'Coach';
+const isAvail=e.type==='available';
+const bg=isAvail?'var(--success-bg)':'var(--danger-bg)';
+const fg=isAvail?'var(--success-text)':'var(--danger-text)';
+const statusLabel=isAvail?'✅ Available':'🚫 Unavailable';
+return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;flex-wrap:wrap">'
++'<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">'
++'<span class="avatar" style="width:26px;height:26px;font-size:10px">'+initials(coachName)+'</span>'
++'<span style="font-weight:700;font-size:14px">'+esc(coachName)+'</span>'
++'<span class="badge" style="background:'+bg+';color:'+fg+'">'+statusLabel+'</span>'
++'</div><div style="font-size:13px;color:var(--text-2)">📅 '+fmtDate(e.from)+' → '+fmtDate(e.to)+(e.note?' — '+esc(e.note):'')+' </div></div>'
++'<button class="btn btn-sm btn-ghost btn-danger" onclick="deleteCoachSchedule(\'' +key+ '\')">&#10005;</button></div>';
+}).join('');
+}
+
+window.addCoachSchedule=async function(){
+const coachUid=document.getElementById('cs-coach')?.value;
+const type=document.getElementById('cs-type')?.value||'available';
+const from=document.getElementById('cs-from')?.value;
+const to=document.getElementById('cs-to')?.value;
+const note=document.getElementById('cs-note')?.value?.trim()||'';
+if(!from||!to){showToast('Start and end date required','⚠️');return;}
+if(to<from){showToast('End date must be after start','⚠️');return;}
+const uSnap=await db.ref('users/'+coachUid).get();
+const coachName=uSnap.val()?.name||'Coach';
+const key=db.ref('coachSchedule').push().key;
+await db.ref('coachSchedule/'+key).set({coachUid,coachName,type,from,to,note,addedBy:currentProfile.name,addedAt:Date.now()});
+showToast('Coach schedule saved ✓');
+document.getElementById('cs-from').value='';
+document.getElementById('cs-to').value='';
+document.getElementById('cs-note').value='';
+const csSnap=await db.ref('coachSchedule').get();
+const uAll=await db.ref('users').get();
+renderCoachScheduleList(csSnap.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
+};
+
+window.deleteCoachSchedule=async function(key){
+await db.ref('coachSchedule/'+key).remove();
+showToast('Removed','🗑');
+const csSnap=await db.ref('coachSchedule').get();
+const uAll=await db.ref('users').get();
+renderCoachScheduleList(csSnap.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
+};
+
 function renderAvailabilityList(avail,uid,containerId,canDelete) {
 const el=document.getElementById(containerId); if(!el)return;
 const now=today();
@@ -4635,6 +4705,10 @@ const SECURE_FIREBASE_RULES = `{
 },
 "lineupTemplates": {
 ".read": "auth != null",
+".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
+},
+"coachSchedule": {
+".read": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'",
 ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'"
 },
 "availability": {
