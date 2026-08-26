@@ -3786,32 +3786,41 @@ const coachUid=parts[0];
 const coachName=parts[1]||'Coach';
 const icalUrl=document.getElementById('cs-ical-url')?.value?.trim()||'';
 const msgEl=document.getElementById('cs-sync-msg');
-const showMsg=(txt,ok)=>{msgEl.style.display='';msgEl.className='msg '+(ok?'msg-ok':'msg-warn');msgEl.textContent=txt;};
+const btn=document.querySelector('button[onclick="syncCoachCalendar()"]');
+const showMsg=(txt,ok)=>{
+  if(!msgEl)return;
+  msgEl.style.display='';
+  msgEl.className='msg '+(ok?'msg-ok':'msg-warn');
+  msgEl.textContent=txt;
+};
 if(!coachUid){showMsg('Please select a coach.');return;}
 if(!icalUrl){showMsg('Please paste a Google Calendar iCal URL.');return;}
-const btn=document.getElementById('cs-sync-msg').previousElementSibling;
 if(btn){btn.disabled=true;btn.textContent='Syncing...';}
 try{
-await db.ref('coachCalendarUrls/'+coachUid).set({url:icalUrl,coachName,updatedAt:Date.now()});
-const FUNCTIONS_BASE='https://us-central1-'+FIREBASE_CONFIG.projectId+'.cloudfunctions.net';
-const res=await fetch(FUNCTIONS_BASE+'/fetchCalendarFeed?url='+encodeURIComponent(icalUrl));
-const data=await res.json();
-if(data.error)throw new Error(data.error);
-const csSnap=await db.ref('coachSchedule').get();
-const existing=csSnap.val()||{};
-const delUpdates={};
-Object.entries(existing).filter(([,e])=>e.coachUid===coachUid&&e.fromCalSync).forEach(([k])=>{delUpdates[k]=null;});
-if(Object.keys(delUpdates).length)await db.ref('coachSchedule').update(delUpdates);
-for(const ev of data.events){
-  const k=db.ref('coachSchedule').push().key;
-  await db.ref('coachSchedule/'+k).set({coachUid,coachName,type:'busy',from:ev.startDate,to:ev.endDate,note:ev.summary,fromCalSync:true,syncedAt:Date.now()});
+  await db.ref('coachCalendarUrls/'+coachUid).set({url:icalUrl,coachName,updatedAt:Date.now()});
+  const FUNCTIONS_BASE='https://us-central1-'+FIREBASE_CONFIG.projectId+'.cloudfunctions.net';
+  const res=await fetch(FUNCTIONS_BASE+'/fetchCalendarFeed?url='+encodeURIComponent(icalUrl));
+  const data=await res.json();
+  if(data.error)throw new Error(data.error);
+  const csSnap=await db.ref('coachSchedule').get();
+  const existing=csSnap.val()||{};
+  const delUpdates={};
+  Object.entries(existing).filter(([,e])=>e.coachUid===coachUid&&e.fromCalSync).forEach(([k])=>{delUpdates[k]=null;});
+  if(Object.keys(delUpdates).length)await db.ref('coachSchedule').update(delUpdates);
+  for(const ev of data.events){
+    const k=db.ref('coachSchedule').push().key;
+    await db.ref('coachSchedule/'+k).set({coachUid,coachName,type:'busy',from:ev.startDate,to:ev.endDate,note:ev.summary,fromCalSync:true,syncedAt:Date.now()});
+  }
+  showMsg('Synced '+data.events.length+' event'+(data.events.length!==1?'s':'')+' from Google Calendar',true);
+  const cs2=await db.ref('coachSchedule').get();
+  const uAll=await db.ref('users').get();
+  renderCoachScheduleList(cs2.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
+}catch(e){
+  console.error('Sync error:',e);
+  showMsg('Could not sync: '+e.message);
+}finally{
+  if(btn){btn.disabled=false;btn.textContent='Sync calendar';}
 }
-showMsg('Synced '+data.events.length+' event'+(data.events.length!==1?'s':'')+' from Google Calendar',true);
-const cs2=await db.ref('coachSchedule').get();
-const uAll=await db.ref('users').get();
-renderCoachScheduleList(cs2.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
-}catch(e){showMsg('Could not sync: '+e.message);}
-finally{if(btn){btn.disabled=false;btn.textContent='Sync calendar';}}
 };
 
 window.deleteCoachSchedule=async function(key){
