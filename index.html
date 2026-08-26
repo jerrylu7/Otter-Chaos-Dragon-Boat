@@ -3745,6 +3745,10 @@ const av_el=document.getElementById('av-team-list');
 if(av_el) av_el.innerHTML=html||'<div style="color:var(--text-3);font-size:13px">No upcoming unavailability reported.</div>';
 });
 renderCoachScheduleList(coachSchedule, members);
+// Auto-refresh all synced calendars in the background each time page opens
+setTimeout(()=>autoSyncAllCoaches().then(()=>{
+  db.ref('coachSchedule').get().then(cs=>{ db.ref('users').get().then(u=>{ renderCoachScheduleList(cs.val()||{},Object.values(u.val()||{}).filter(x=>x.approved)); }); });
+}).catch(()=>{}), 800);
 }
 });
 }
@@ -3759,25 +3763,121 @@ if(!entries.length){
   el.innerHTML='<div style="color:var(--text-3);font-size:13px;padding:8px 0">No coach schedule entries yet. Sync a Google Calendar above to get started.</div>';
   return;
 }
-el.innerHTML=entries.map(([key,e])=>{
-  const cn=(members&&members.find(m=>m.uid===e.coachUid)||{}).name||e.coachName||'Coach';
-  const isCal=!!e.fromCalSync;
-  const bgCol=isCal?'var(--race-bg)':'var(--accent-bg)';
-  const fgCol=isCal?'var(--race-text)':'var(--accent-text)';
-  const lbl=isCal?'Calendar sync':'Manual';
-  const dateStr=e.from?fmtDate(e.from)+((e.to&&e.to!==e.from)?' to '+fmtDate(e.to):''):'';
-  return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:6px;flex-wrap:wrap">'
-  +'<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">'
-  +'<span class="avatar" style="width:26px;height:26px;font-size:10px">'+initials(cn)+'</span>'
-  +'<span style="font-weight:700;font-size:14px">'+esc(cn)+'</span>'
-  +'<span class="badge" style="background:'+bgCol+';color:'+fgCol+'">'+lbl+'</span>'
-  +'</div>'
-  +'<div style="font-size:13px;color:var(--text-2)">'+dateStr+(e.note?' &mdash; '+esc(e.note):'')+' </div>'
-  +'</div>'
-  +'<button class="btn btn-sm btn-ghost btn-danger" onclick="deleteCoachSchedule(\''+key+'\')">&#10005;</button>'
-  +'</div>';
-}).join('');
+
+// Group entries by month for calendar view
+const byMonth={};
+entries.forEach(([key,e])=>{
+  if(!e.from)return;
+  // Expand multi-day entries into individual days
+  let d=new Date(e.from+'T12:00:00');
+  const end=new Date((e.to||e.from)+'T12:00:00');
+  while(d<=end){
+    const ds=d.toISOString().slice(0,10);
+    const mk=ds.slice(0,7);
+    if(!byMonth[mk])byMonth[mk]=[];
+    byMonth[mk].push({key,date:ds,note:e.note||'',coachUid:e.coachUid,coachName:e.coachName||'Coach',isCal:!!e.fromCalSync,isFirst:ds===e.from,isLast:ds===(e.to||e.from)});
+    d.setDate(d.getDate()+1);
+  }
+});
+
+const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+let html='<div style="font-size:11px;color:var(--text-3);margin-bottom:10px">&#128197; Coach busy days shown in purple &mdash; <a href="#" onclick="autoSyncAllCoaches();return false" style="color:var(--accent)">Refresh all calendars</a></div>';
+
+Object.keys(byMonth).sort().forEach(mk=>{
+  const [yr,mo]=mk.split('-').map(Number);
+  const firstDay=new Date(yr,mo-1,1).getDay();
+  const lastDate=new Date(yr,mo,0).getDate();
+  const days=byMonth[mk];
+  const daySet={};
+  days.forEach(d=>{ if(!daySet[d.date])daySet[d.date]=[]; daySet[d.date].push(d); });
+
+  html+='<div class="card" style="padding:0;overflow:hidden;margin-bottom:12px">';
+  html+='<div style="padding:10px 14px;background:var(--surface-alt);border-bottom:1px solid var(--border);font-weight:700;font-size:14px">'+MONTHS[mo-1]+' '+yr+'</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border)">';
+  DAYS.forEach(d=>{ html+='<div style="text-align:center;font-size:10px;font-weight:700;color:var(--text-3);padding:5px 2px">'+d+'</div>'; });
+  html+='</div>';
+  html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--border);padding:1px">';
+
+  // Empty cells before first day
+  for(let i=0;i<firstDay;i++) html+='<div style="background:var(--surface);min-height:52px"></div>';
+
+  for(let date=1;date<=lastDate;date++){
+    const ds=mk+'-'+(date<10?'0':'')+date;
+    const isToday=ds===now;
+    const dayEntries=daySet[ds]||[];
+    const busy=dayEntries.length>0;
+    html+='<div style="background:'+(isToday?'var(--accent-bg)':busy?'#f3ecff':'var(--surface)')
+      +';min-height:52px;padding:4px 3px;position:relative">';
+    html+='<div style="font-size:11px;font-weight:'+(isToday?'800':'600')+';color:'
+      +(isToday?'var(--accent-text)':busy?'#7c3aed':'var(--text-2)')
+      +';margin-bottom:2px">'+date+'</div>';
+    if(busy){
+      const names=[...new Set(dayEntries.map(d=>d.coachName||'Coach'))];
+      names.forEach(name=>{
+        const initl=name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+        html+='<div style="background:#7c3aed;color:#fff;border-radius:3px;font-size:9px;padding:1px 4px;margin-bottom:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(name)+' &mdash; '+esc(dayEntries[0].note)+'">'+initl+' busy</div>';
+      });
+    }
+    html+='</div>';
+  }
+
+  // Fill remaining cells
+  const totalCells=firstDay+lastDate;
+  const remainder=totalCells%7;
+  if(remainder>0) for(let i=0;i<7-remainder;i++) html+='<div style="background:var(--surface);min-height:52px"></div>';
+
+  html+='</div>';
+  // Legend for this month
+  if(days.length){
+    const uniqueEvents=[...new Map(days.map(d=>[d.note,d])).values()].slice(0,5);
+    html+='<div style="padding:8px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--text-2)">';
+    uniqueEvents.forEach(d=>{
+      if(d.note) html+='<div style="margin-bottom:2px"><span style="color:#7c3aed;font-weight:600">'+esc(d.coachName)+':</span> '+esc(d.note)+'</div>';
+    });
+    html+='</div>';
+  }
+  html+='</div>';
+});
+
+el.innerHTML=html;
 }
+
+// Auto-sync all coaches who have saved calendar URLs
+window.autoSyncAllCoaches=async function(){
+  if(!can.edit())return;
+  const urlsSnap=await db.ref('coachCalendarUrls').get();
+  if(!urlsSnap.exists())return;
+  const coaches=urlsSnap.val();
+  const FUNCTIONS_BASE='https://us-central1-'+FIREBASE_CONFIG.projectId+'.cloudfunctions.net';
+  let synced=0;
+  for(const [coachUid,data] of Object.entries(coaches)){
+    if(!data.url)continue;
+    try{
+      const res=await fetch(FUNCTIONS_BASE+'/fetchCalendarFeed?url='+encodeURIComponent(data.url));
+      const json=await res.json();
+      if(json.error||!json.events)continue;
+      const csSnap=await db.ref('coachSchedule').get();
+      const existing=csSnap.val()||{};
+      const del={};
+      Object.entries(existing).filter(([,e])=>e.coachUid===coachUid&&e.fromCalSync).forEach(([k])=>{del[k]=null;});
+      if(Object.keys(del).length)await db.ref('coachSchedule').update(del);
+      for(const ev of json.events){
+        const k=db.ref('coachSchedule').push().key;
+        await db.ref('coachSchedule/'+k).set({coachUid,coachName:data.coachName,type:'busy',from:ev.startDate,to:ev.endDate,note:ev.summary,fromCalSync:true,syncedAt:Date.now()});
+      }
+      synced++;
+    }catch(e){console.warn('Auto-sync failed for',coachUid,e);}
+  }
+  if(synced){
+    showToast('Calendars refreshed \u2713');
+    const cs=await db.ref('coachSchedule').get();
+    const uAll=await db.ref('users').get();
+    renderCoachScheduleList(cs.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
+  }
+};
+
 
 window.syncCoachCalendar=async function(){
 const raw=document.getElementById('cs-coach')?.value||'';
