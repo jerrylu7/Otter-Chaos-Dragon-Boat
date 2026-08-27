@@ -424,7 +424,7 @@ if (!evSnap.exists()) return;
 const teamName = tnSnap.val() || TEAM_NAME_DEFAULT;
 const allUsers = Object.values(uSnap.val()||{}).filter(u=>u.approved);
 const sentLog = sentSnap.val() || {};
-const events = Object.values(evSnap.val()).filter(e => e.type === 'Practice');
+const events = Object.values(evSnap.val()).filter(e => e.name); // all event types
 for (const ev of events) {
 const sentKey = `${ev.id}_${todayStr}`.replace(/[.#$[\]]/g,'_');
 if (sentLog[sentKey]) continue;
