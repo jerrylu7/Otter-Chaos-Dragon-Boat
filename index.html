@@ -685,7 +685,9 @@ const allEvents = Object.values(evSnap.val()||{})
 const lineups = lineupSnap.val()||{};
 const now = today();
 const allUpcoming = allEvents.filter(e => e.date >= now);
-const past = allEvents.filter(e => e.date < now);
+const sStart = currentSeasonStart();
+const sEnd = sStart.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
+const past = allEvents.filter(e => e.date < now && e.date >= sStart && e.date <= sEnd);
 const pendingCount = allUpcoming.filter(e => !(e.rsvps||{})[uid]).length;
 const attendedPast = past.filter(e => (e.rsvps||{})[uid]==='yes').length;
 const attPct = past.length ? Math.round(attendedPast/past.length*100) : null;
@@ -1710,7 +1712,8 @@ db.ref('settings/attendanceThreshold').get(),
 ]).then(([evSnap, threshSnap]) => {
 const threshold = threshSnap.val();
 if (threshold != null && uid) {
-const past = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today());
+const _ss=currentSeasonStart(),_se=_ss.replace(/^(\d+)/,y=>String(parseInt(y)+1)).replace('10-01','09-30');
+const past = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today()&&e.date>=_ss&&e.date<=_se);
 const attended = past.filter(e=>(e.rsvps||{})[uid]==='yes').length;
 const pct = past.length ? Math.round(attended/past.length*100) : null;
 if (pct !== null) {
@@ -1835,7 +1838,9 @@ const lineups = lSnap.val()||{};
 const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
 const noteItems = Object.entries(notesSnap.val()||{}).sort((a,b)=>b[1].ts-a[1].ts);
 const threshold = threshSnap.val();
-const past = allEvs.filter(e => e.date < today());
+const seasonStart = currentSeasonStart();
+const seasonEnd = seasonStart.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
+const past = allEvs.filter(e => e.date < today() && e.date >= seasonStart && e.date <= seasonEnd);
 const upcoming = allEvs.filter(e => e.date >= today());
 const pastPractices = past.filter(e=>e.type==='Practice');
 const pastRaces = past.filter(e=>e.type==='Race');
@@ -2788,17 +2793,20 @@ const allPractices = Object.values(evSnap.val()||{})
 
 // Build list of all seasons that have practices
 const seasonStarts = [...new Set(allPractices.map(e=>seasonStartForDate(e.date)))].sort();
+// Always default to current season — never fall back to a past season automatically
 const curSeason = window._selectedSeason || currentSeasonStart();
-const activeSeason = seasonStarts.includes(curSeason) ? curSeason : (seasonStarts[seasonStarts.length-1]||curSeason);
+const activeSeason = curSeason;
 
 const seasonEnd = activeSeason.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
 const events = allPractices.filter(e => e.date >= activeSeason && e.date <= seasonEnd);
 
-const seasonPicker = seasonStarts.length > 1 ? `
+// Always include current season in the picker even if no practices yet
+const allSeasonStarts = [...new Set([...seasonStarts, currentSeasonStart()])].sort();
+const seasonPicker = allSeasonStarts.length > 1 ? `
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap">
     <label style="font-size:13px;font-weight:700;color:var(--text-2)">Season:</label>
     <select onchange="window._selectedSeason=this.value;_pgAttendanceBody()" style="max-width:220px;font-size:13px">
-      ${seasonStarts.slice().reverse().map(s=>`<option value="${s}" ${s===activeSeason?'selected':''}>${seasonLabel(s)}</option>`).join('')}
+      ${allSeasonStarts.slice().reverse().map(s=>`<option value="${s}" ${s===activeSeason?'selected':''}>${seasonLabel(s)}</option>`).join('')}
     </select>
     ${can.admin()?`<button class="btn btn-sm btn-ghost" onclick="archiveSeason('${activeSeason}')">📦 Archive season</button>`:''}
   </div>` : can.admin() ? `<div style="margin-bottom:16px"><button class="btn btn-sm btn-ghost" onclick="archiveSeason('${activeSeason}')">📦 Archive season</button></div>` : '';
