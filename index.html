@@ -299,6 +299,10 @@ if (!user) { showAuth(); return; }
 currentUser = user;
 const snap = await db.ref('users/'+user.uid).get();
 if (!snap.exists() || !snap.val().approved) { showPending(); return; }
+if (snap.val().disabled) {
+  showPending('\u23f8 Your account has been temporarily disabled. Please contact your coach or admin.');
+  return;
+}
 currentProfile = snap.val();
 hideSplash();
 document.getElementById('auth-screen').style.display = 'none';
@@ -325,12 +329,12 @@ db.ref('settings/teamName').get().then(s => {
 if (s.val()) document.getElementById('auth-team-name').textContent = s.val();
 });
 }
-function showPending() {
+function showPending(customMsg) {
 hideSplash();
 document.getElementById('auth-screen').style.display = 'flex';
 document.getElementById('login-form').style.display = 'none';
 document.getElementById('register-form').style.display = 'none';
-showMsg('⏳ Your account is pending admin approval. Check back soon.','warn');
+showMsg(customMsg||'⏳ Your account is pending admin approval. Check back soon.','warn');
 const signOutLink = document.createElement('p');
 signOutLink.style.cssText = 'text-align:center;margin-top:14px;font-size:13px';
 signOutLink.innerHTML = '<a href="#" onclick="auth.signOut()" style="color:var(--accent)">Sign out</a>';
@@ -422,7 +426,7 @@ db.ref('remindersSent').get(),
 ]);
 if (!evSnap.exists()) return;
 const teamName = tnSnap.val() || TEAM_NAME_DEFAULT;
-const allUsers = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+const allUsers = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
 const sentLog = sentSnap.val() || {};
 const events = Object.values(evSnap.val()).filter(e => e.name); // all event types
 for (const ev of events) {
@@ -756,7 +760,7 @@ window._dashAllEvents = allEvents;
 window._dashUid = uid;
 window._dashMySeat = mySeat;
 window._dashAvailability = can.edit() ? (avSnap.val()||{}) : {};
-window._dashMembers = can.edit() ? Object.values(uSnap.val()||{}).filter(u=>u.approved) : [];
+window._dashMembers = can.edit() ? Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled) : [];
 window._dashBreaks = breaksSnap.val()||{};
 window._dashCoachSchedule = can.edit() ? (csSnap.val()||{}) : {};
 const n = new Date();
@@ -1041,7 +1045,7 @@ db.ref('users').get(),
 db.ref('lineups/'+evId).get(),
 ]).then(([evSnap, uSnap, lineupSnap]) => {
 const ev = evSnap.val(); if (!ev) return;
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
 const lineup = lineupSnap.val()||{};
 const uid = currentUser.uid;
 const yesCount = Object.values(ev.rsvps||{}).filter(v=>v==='yes').length;
@@ -1420,7 +1424,7 @@ db.ref(lineupPath(evId)).get(),
 db.ref('events/'+evId).get(),
 db.ref('availability').get(),
 ]).then(([uSnap, lSnap, evSnap, avSnap])=>{
-const allMembers = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+const allMembers = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
 const ev = window._evPage?.ev || evSnap.val() || {};
 const evDate = ev?.date||'';
 const goingUids = new Set(Object.entries((ev?.rsvps)||{}).filter(([,v])=>v==='yes').map(([k])=>k));
@@ -1628,7 +1632,7 @@ if(!can.edit())return;
 closeModal();
 const [evSnap,uSnap]=await Promise.all([db.ref('events/'+evId).get(),db.ref('users').get()]);
 const ev=evSnap.val(); if(!ev)return;
-const members=Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
 const overlay=document.createElement('div');overlay.className='overlay';
 overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
 overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
@@ -2064,7 +2068,9 @@ const b=document.createElement('button'); b.className='btn btn-primary'; b.inner
 const ib=document.createElement('button'); ib.className='btn'; ib.innerHTML='🔗 Invite link'; ib.onclick=showInviteModal; A.appendChild(ib);
 }
 trackListener(db.ref('users'), 'value', snap => {
-const members = Object.values(snap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const allApproved = Object.values(snap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const members = allApproved.filter(u=>!u.disabled);
+const disabled = allApproved.filter(u=>u.disabled);
 if (!can.edit()) {
 C.innerHTML = `
 <div style="font-size:13px;color:var(--text-3);margin-bottom:14px">${members.length} team members — contact an admin to update your own info.</div>
@@ -2119,6 +2125,24 @@ ${can.admin()?`<td><div style="display:flex;gap:5px">
 </div></td>`:''}
 </tr>`).join('')}</tbody>
 </table></div>`;
+
+if (can.admin() && disabled.length) {
+  const dd = document.createElement("div"); dd.style.marginTop = "24px";
+  let dhtml = "<div class=\"dash-section-title\" style=\"color:var(--text-3)\">⏸ Disabled accounts (" + disabled.length + ")</div>";
+  dhtml += "<div class=\"card\" style=\"padding:0;overflow:hidden\">";
+  disabled.forEach(m => {
+    dhtml += "<div style=\"display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap\">"
+      + "<div style=\"display:flex;align-items:center;gap:10px\">"
+      + "<div class=\"avatar\" style=\"opacity:0.5\">" + initials(m.name) + "</div>"
+      + "<div><div style=\"font-weight:700;font-size:14px;color:var(--text-3)\">" + esc(m.name) + "</div>"
+      + "<div style=\"font-size:12px;color:var(--text-3)\">" + esc(m.email||"") + " — " + (m.role||"paddler") + "</div></div></div>"
+      + "<button class=\"btn btn-sm btn-ghost\" style=\"color:var(--success-text)\" onclick=\"toggleMemberDisabled('" + m.uid + "',true)\">✓ Re-enable</button>"
+      + "</div>";
+  });
+  dhtml += "</div>";
+  dd.innerHTML = dhtml;
+  C.appendChild(dd);
+}
 });
 }
 window.openMemberProfile = function(memberUid) {
@@ -2333,9 +2357,12 @@ ${['Paddler','Caller','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddle
 </div>
 <div class="form-group"><label class="form-label">Emergency contact</label><input id="mf-emerg" value="${esc(m?.emergency||'')}" placeholder="Name · Phone"></div>
 </div>
-<div class="modal-footer">
+<div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+${m&&m.uid?'<button class="btn btn-ghost btn-sm" style="color:'+(m.disabled?'var(--success-text)':'var(--danger-text)')+' onclick="toggleMemberDisabled(\''+m.uid+'\','+(m.disabled?'true':'false')+')">'+(m.disabled?'✓ Re-enable account':'⏸ Disable account')+'</button>':'<div></div>'}
+<div style="display:flex;gap:8px">
 <button class="btn" onclick="closeModal()">Cancel</button>
-<button class="btn btn-primary" onclick="saveMember('${m?.uid||''}',${isNew})">Save member</button>
+<button class="btn btn-primary" onclick="saveMember('${m?.uid||''}',${isNew})">Save</button>
+</div>
 </div>
 </div>`;
 document.body.appendChild(overlay); modalEl=overlay;
@@ -2386,7 +2413,7 @@ window.loadLineup = evId => {
 if (!evId) { document.getElementById('lineup-body').innerHTML=''; return; }
 db.ref('users').get().then(uSnap => {
 trackListener(db.ref('lineups/'+evId), 'value', lSnap => {
-drawBoat(evId, lSnap.val()||{}, Object.values(uSnap.val()||{}).filter(u=>u.approved));
+drawBoat(evId, lSnap.val()||{}, Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled));
 });
 });
 };
@@ -2460,7 +2487,7 @@ window.pickSeat = function(evId, key) {
 if (!can.edit()) return; closeModal();
 db.ref('users').get().then(uSnap => {
 db.ref('lineups/'+evId).get().then(lSnap => {
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
 const lineup = lSnap.val()||{};
 const seated = new Set(Object.entries(lineup).filter(([k,v])=>k!==key&&v).map(([,v])=>v));
 const avail = members.filter(m=>!seated.has(m.uid));
@@ -2501,7 +2528,7 @@ const b=document.createElement('button'); b.className='btn btn-primary'; b.inner
 trackListener(db.ref('events').orderByChild('date'), 'value', snap => {
 const evs = Object.values(snap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
 db.ref('users').get().then(uSnap => {
-const mc = Object.values(uSnap.val()||{}).filter(u=>u.approved).length;
+const mc = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).length;
 const upcoming = evs.filter(e=>e.date>=today());
 const past = evs.filter(e=>e.date<today()).reverse();
 if (!evs.length) { C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">📅</div><div class="empty-title">No events yet</div></div></div>`; return; }
@@ -2554,7 +2581,7 @@ const isNew = !ev;
 const overlay = document.createElement('div'); overlay.className='overlay';
 overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
 db.ref('users').get().then(uSnap => {
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
 const invitees = e.invitees||{};
 overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
 <div class="modal-header" style="flex-shrink:0"><div class="modal-title">${isNew?'Add event':'Edit event'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
@@ -2707,7 +2734,7 @@ window.openRsvpModal = function(evId) {
 closeModal();
 Promise.all([db.ref('events/'+evId).get(), db.ref('users').get()]).then(([evSnap,uSnap]) => {
 const ev = evSnap.val();
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
 const rsvps = {...(ev.rsvps||{})};
 const ed = can.edit();
 const overlay = document.createElement('div'); overlay.className='overlay';
@@ -2805,7 +2832,7 @@ function _pgAttendanceBody() {
 if (!can.view()) return;
 const C = document.getElementById('stats-tab-body');
 Promise.all([db.ref('users').get(), db.ref('events').get()]).then(([uSnap,evSnap]) => {
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
 const allPractices = Object.values(evSnap.val()||{})
   .filter(e => e.type === 'Practice' && e.date < today())
   .sort((a,b)=>a.date.localeCompare(b.date));
@@ -2987,7 +3014,7 @@ const C = document.getElementById('pg-content');
 const emailjsOn = EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('YOUR_');
 const twoDaysStr = (()=>{ const d=new Date(); d.setDate(d.getDate()+2); return d.toISOString().slice(0,10); })();
 Promise.all([db.ref('users').get(), db.ref('events').get(), db.ref('settings/teamName').get()]).then(([uSnap,evSnap,tnSnap]) => {
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
 const events = Object.values(evSnap.val()||{}).filter(e=>e.date>=today() && canSeeEvent(e)).sort((a,b)=>a.date.localeCompare(b.date));
 const teamName = tnSnap.val()||TEAM_NAME_DEFAULT;
 const autoTargets = events.filter(e=>e.type==='Practice'&&e.date===twoDaysStr);
@@ -3055,7 +3082,7 @@ const C = document.getElementById('pg-content');
 trackListener(db.ref('users'), 'value', snap => {
 const all = Object.values(snap.val()||{});
 const pending = all.filter(u=>!u.approved);
-const approved = all.filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const approved = all.filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
 const roleLegend = `<div class="card" style="padding:16px 20px;margin-bottom:20px">
 <div style="font-size:13px;font-weight:700;margin-bottom:10px">App roles — only admins can assign these</div>
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;font-size:13px">
@@ -3568,7 +3595,7 @@ db.ref('lineups/'+raceId).get(),
 ]).then(([evSnap,heatSnap,uSnap,lrSnap,lineupSnap])=>{
 const ev=evSnap.val(); if(!ev)return;
 const heats=Object.entries(heatSnap.val()||{}).sort((a,b)=>Number(a[1].order||0)-Number(b[1].order||0));
-const allMembers=Object.values(uSnap.val()||{}).filter(u=>u.approved);
+const allMembers=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
 const members=allMembers.filter(u=>(ev.rsvps||{})[u.uid]==='yes').sort((a,b)=>a.name.localeCompare(b.name));
 const liveUrl=lrSnap.val()||'';
 const lineup=lineupSnap.val()||{};
@@ -3743,7 +3770,7 @@ Promise.all([
   db.ref('coachSchedule').get(),
 ]).then(([avSnap,uSnap,csSnap])=>{
 const avail=avSnap.val()||{};
-const members=can.edit()?Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name)):[];
+const members=can.edit()?Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name)):[];
 const coachSchedule=csSnap.val()||{};
 C.innerHTML=`
 <div class="card" style="padding:20px;margin-bottom:16px;max-width:600px">
@@ -3938,7 +3965,7 @@ window.autoSyncAllCoaches=async function(){
     showToast('Calendars refreshed \u2713');
     const cs=await db.ref('coachSchedule').get();
     const uAll=await db.ref('users').get();
-    renderCoachScheduleList(cs.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
+    renderCoachScheduleList(cs.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved&&!u.disabled));
   }
 };
 
@@ -3978,7 +4005,7 @@ try{
   showMsg('Synced '+data.events.length+' event'+(data.events.length!==1?'s':'')+' from Google Calendar',true);
   const cs2=await db.ref('coachSchedule').get();
   const uAll=await db.ref('users').get();
-  renderCoachScheduleList(cs2.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
+  renderCoachScheduleList(cs2.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved&&!u.disabled));
 }catch(e){
   console.error('Sync error:',e);
   showMsg('Could not sync: '+e.message);
@@ -3992,7 +4019,7 @@ await db.ref('coachSchedule/'+key).remove();
 showToast('Removed');
 const cs=await db.ref('coachSchedule').get();
 const uAll=await db.ref('users').get();
-renderCoachScheduleList(cs.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved));
+renderCoachScheduleList(cs.val()||{},Object.values(uAll.val()||{}).filter(u=>u.approved&&!u.disabled));
 };
 
 function renderAvailabilityList(avail,uid,containerId,canDelete) {
@@ -4042,7 +4069,7 @@ return;
 }
 const uid=currentUser.uid;
 Promise.all([db.ref('users').get(),db.ref('events').get()]).then(([uSnap,evSnap])=>{
-const members=Object.values(uSnap.val()||{}).filter(u=>u.approved);
+const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
 const activeSeason = window._selectedSeason || currentSeasonStart();
 const seasonEnd = activeSeason.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
 const events=Object.values(evSnap.val()||{}).filter(e=>e.date<today()&&e.date>=activeSeason&&e.date<=seasonEnd);
@@ -4123,7 +4150,7 @@ if(can.edit()){
 const b=document.createElement('button');b.className='btn';b.innerHTML='⬇ Export PDF';b.onclick=exportSeasonPDF;A.appendChild(b);
 }
 Promise.all([db.ref('users').get(),db.ref('events').get()]).then(([uSnap,evSnap])=>{
-const members=Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
 const activeSeason = window._selectedSeason || currentSeasonStart();
 const seasonEnd = activeSeason.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
 const events=Object.values(evSnap.val()||{}).filter(e=>e.date<today()&&e.date>=activeSeason&&e.date<=seasonEnd).sort((a,b)=>a.date.localeCompare(b.date));
@@ -4865,7 +4892,7 @@ setTimeout(()=>{
 const C = document.getElementById('pg-content'); if(!C) return;
 db.ref('users').get().then(uSnap=>{
 db.ref('events').get().then(evSnap=>{
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved);
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
 const practices = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today()).sort((a,b)=>a.date.localeCompare(b.date));
 const trendHtml = renderRsvpTrends(practices, members);
 if (trendHtml) {
@@ -5533,7 +5560,7 @@ window.archiveSeason = async function(seasonStart) {
 
   const seasonEnd = seasonStart.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
   const [uSnap, evSnap] = await Promise.all([db.ref('users').get(), db.ref('events').get()]);
-  const members  = Object.values(uSnap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+  const members  = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
   const events   = Object.values(evSnap.val()||{}).filter(e=>e.date>=seasonStart&&e.date<=seasonEnd&&e.date<today());
   const practices = events.filter(e=>e.type==='Practice');
   const races     = events.filter(e=>e.type==='Race');
@@ -5681,6 +5708,22 @@ window.deleteBreak = async function(breakKey) {
   closeModal();
   showToast('Break removed','🗑');
   pgDashboard();
+};
+
+// ── Disable / re-enable member account ───────────────────────────────────────
+window.toggleMemberDisabled = async function(uid, currentlyDisabled) {
+  if (!can.admin()) return;
+  const action = currentlyDisabled ? 're-enable' : 'disable';
+  const name = (await db.ref('users/'+uid+'/name').get()).val() || 'this member';
+  if (!confirm(`${currentlyDisabled ? 'Re-enable' : 'Disable'} ${name}'s account?\n\n${
+    currentlyDisabled
+    ? 'They will appear on rosters and lineups again and will receive notifications.'
+    : 'They will be hidden from rosters and lineups, and will not receive any notifications or emails. Their data is fully preserved and the account can be re-enabled at any time.'
+  }`)) return;
+  await db.ref('users/'+uid+'/disabled').set(currentlyDisabled ? null : true);
+  showToast(`${name}'s account ${currentlyDisabled ? 're-enabled' : 'disabled'} ✓`);
+  closeModal();
+  pgRoster();
 };
 
 initApp();</script>
