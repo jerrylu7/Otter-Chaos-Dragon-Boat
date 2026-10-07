@@ -1917,7 +1917,7 @@ C.innerHTML=`${threshBanner}
 <div style="width:68px;height:68px;border-radius:50%;background:var(--accent-bg);color:var(--accent-text);font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">${initials(p.name)}</div>
 <div>
 <div style="font-size:22px;font-weight:800;letter-spacing:-0.4px">${esc(p.name)}</div>
-<div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">${roleBadge(p.role)}${sides.map(s=>`<span class="badge" style="background:${s==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${s==='Left'?'var(--accent-text)':'var(--success-text)'}">${s}</span>`).join('')}${roles.map(r=>`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);border:1px solid var(--border)">${r}</span>`).join('')}</div>
+<div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap">${roleBadge(p.role)}${p.disabled?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text)">⏸ Disabled</span>':'<span class="badge" style="background:var(--success-bg);color:var(--success-text)">✓ Active</span>'}${sides.map(s=>`<span class="badge" style="background:${s==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${s==='Left'?'var(--accent-text)':'var(--success-text)'}">${s}</span>`).join('')}${roles.map(r=>`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);border:1px solid var(--border)">${r}</span>`).join('')}</div>
 </div>
 </div>
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;font-size:14px;margin-bottom:12px">
@@ -2174,6 +2174,7 @@ overlay.innerHTML = `<div class="modal" style="display:flex;flex-direction:colum
 <div class="modal-title">${esc(m.name)}</div>
 <div class="modal-sub" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:3px">
 ${roleBadge(m.role)}
+${m.disabled?'<span class="badge" style="background:var(--warning-bg);color:var(--warning-text)">⏸ Disabled</span>':''}
 ${sides.map(s=>`<span class="badge" style="background:${s==='Left'?'var(--accent-bg)':'var(--success-bg)'};color:${s==='Left'?'var(--accent-text)':'var(--success-text)'}">${s}</span>`).join('')}
 ${roles.map(r=>`<span class="badge" style="background:var(--surface-alt);color:var(--text-2);border:1px solid var(--border)">${r}</span>`).join('')}
 </div>
@@ -2358,7 +2359,7 @@ ${['Paddler','Caller','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddle
 <div class="form-group"><label class="form-label">Emergency contact</label><input id="mf-emerg" value="${esc(m?.emergency||'')}" placeholder="Name · Phone"></div>
 </div>
 <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-${m&&m.uid?'<button class="btn btn-ghost btn-sm" style="color:'+(m.disabled?'var(--success-text)':'var(--danger-text)')+' onclick="toggleMemberDisabled(\''+m.uid+'\','+(m.disabled?'true':'false')+')">'+(m.disabled?'✓ Re-enable account':'⏸ Disable account')+'</button>':'<div></div>'}
+${m&&m.uid?'<button class="btn btn-ghost btn-sm" style="color:'+(m.disabled?'var(--success-text)':'var(--danger-text)')+';" onclick="toggleMemberDisabled(\''+m.uid+'\','+(m.disabled?'true':'false')+')">'+(m.disabled?'✓ Re-enable account':'⏸ Disable account')+'</button>':'<div></div>'}
 <div style="display:flex;gap:8px">
 <button class="btn" onclick="closeModal()">Cancel</button>
 <button class="btn btn-primary" onclick="saveMember('${m?.uid||''}',${isNew})">Save</button>
