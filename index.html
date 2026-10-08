@@ -1048,7 +1048,8 @@ const ev = evSnap.val(); if (!ev) return;
 const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
 const lineup = lineupSnap.val()||{};
 const uid = currentUser.uid;
-const yesCount = Object.values(ev.rsvps||{}).filter(v=>v==='yes').length;
+const memberUidSet = new Set(members.map(m=>m.uid));
+const yesCount = Object.entries(ev.rsvps||{}).filter(([k,v])=>v==='yes'&&memberUidSet.has(k)).length;
 document.getElementById('pg-title').textContent = ev.name;
 document.getElementById('pg-sub').textContent = fmtDate(ev.date) + (ev.time ? ' · ' + fmtTime(ev.time) : '') + (ev.location ? ' · ' + ev.location : '');
 const A = document.getElementById('pg-actions');
@@ -1543,7 +1544,13 @@ showToast('Seat assigned','🚣');
 window.evdClrSeat = async function(evId, key) {
 if(!can.edit()) return;
 const path = lineupPath(evId);
+try {
 await db.ref(path+'/'+key).remove();
+} catch(e) {
+showToast('Could not remove seat — check permissions','⚠️');
+console.error('evdClrSeat error:', e);
+return;
+}
 const lSnap = await db.ref(path).get();
 const newLineup = lSnap.val()||{};
 if(window._evPage) {
@@ -1769,8 +1776,9 @@ b.onclick = () => { openEvtModal(null, typeFilter); };
 A.appendChild(b);
 }
 trackListener(db.ref('events').orderByChild('date'), 'value', snap => {
-db.ref('lineups').get().then(lSnap => {
+Promise.all([db.ref('lineups').get(), db.ref('users').get()]).then(([lSnap, uSnap2]) => {
 const lineups = lSnap.val() || {};
+const approvedUids = new Set(Object.entries(uSnap2.val()||{}).filter(([,u])=>u.approved&&!u.disabled).map(([k])=>k));
 const all = Object.values(snap.val()||{})
 .filter(e => e.type === typeFilter && canSeeEvent(e))
 .sort((a,b) => a.date.localeCompare(b.date));
@@ -1801,7 +1809,7 @@ const seatInfo = seat ? `<div class="dash-my-seat">🚣 Your seat: <strong>${esc
 const daysUntil = Math.round((new Date(ev.date+'T12:00:00') - new Date()) / 86400000);
 const daysLabel = isPast ? '' : daysUntil===0 ? '🔴 Today!' : daysUntil===1 ? '🟡 Tomorrow' : `${daysUntil}d away`;
 const borderClass = isPast ? '' : rsvp==='yes' ? 'rsvp-yes' : rsvp==='no' ? 'rsvp-no' : 'rsvp-pending';
-const yesCount = Object.values(ev.rsvps||{}).filter(v=>v==='yes').length;
+const yesCount = Object.entries(ev.rsvps||{}).filter(([k,v])=>v==='yes'&&approvedUids.has(k)).length;
 const editBtns = can.edit() && !isPast
 ? `<div style="display:flex;gap:5px;margin-top:8px">
 <button class="btn btn-sm btn-ghost" onclick='openEvtModal(${JSON.stringify(JSON.stringify(ev))})'>Edit</button>
