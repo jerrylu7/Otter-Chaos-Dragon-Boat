@@ -202,6 +202,17 @@ view: () => ['admin','coach','tester'].includes(currentProfile?.role),
 };
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const genUid = p => (p||'id')+'_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+
+// ── Helper: check if a uid was on vacation on a given date ───────────────────
+function isAwayOnDate(availData, uid, dateStr) {
+  const periods = availData && availData[uid] ? Object.values(availData[uid]) : [];
+  return periods.some(p => p.from && p.to && dateStr >= p.from && dateStr <= p.to);
+}
+// Filter events list to exclude ones where a member was on vacation
+function eventsExcludingAway(events, availData, uid) {
+  return events.filter(e => !isAwayOnDate(availData, uid, e.date));
+}
+
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Vancouver' });
 const initials = n => String(n||'').trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
 const fmtDate = d => d ? new Date(d+'T12:00:00').toLocaleDateString('en-CA',{weekday:'short',month:'short',day:'numeric',year:'numeric'}) : '';
@@ -678,7 +689,7 @@ C.innerHTML = `
 Promise.all([
 db.ref('events').orderByChild('date').get(),
 db.ref('lineups').get(),
-can.edit() ? db.ref('availability').get() : Promise.resolve({val:()=>({})}),
+can.edit() ? db.ref('availability').get() : db.ref('availability/'+currentUser.uid).get().then(s=>({val:()=>s.exists()?{[currentUser.uid]:s.val()}:{}})),
 can.edit() ? db.ref('users').get() : Promise.resolve({val:()=>({})}),
 db.ref('breaks').get(),
 can.edit() ? db.ref('coachSchedule').get() : Promise.resolve({val:()=>({})}),
@@ -693,8 +704,9 @@ const sStart = currentSeasonStart();
 const sEnd = sStart.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
 const past = allEvents.filter(e => e.date < now && e.date >= sStart && e.date <= sEnd);
 const pendingCount = allUpcoming.filter(e => !(e.rsvps||{})[uid]).length;
-const attendedPast = past.filter(e => (e.rsvps||{})[uid]==='yes').length;
-const attPct = past.length ? Math.round(attendedPast/past.length*100) : null;
+const pastExclAway = eventsExcludingAway(past, avSnap.val()||{}, uid);
+const attendedPast = pastExclAway.filter(e => (e.rsvps||{})[uid]==='yes').length;
+const attPct = pastExclAway.length ? Math.round(attendedPast/pastExclAway.length*100) : null;
 const hour = new Date().getHours();
 const greet = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 function mySeat(evId) {
@@ -1739,13 +1751,16 @@ const uid = currentUser?.uid;
 Promise.all([
 db.ref('events').get(),
 db.ref('settings/attendanceThreshold').get(),
-]).then(([evSnap, threshSnap]) => {
+db.ref('availability/'+uid).get(),
+]).then(([evSnap, threshSnap, myAvSnap]) => {
 const threshold = threshSnap.val();
 if (threshold != null && uid) {
 const _ss=currentSeasonStart(),_se=_ss.replace(/^(\d+)/,y=>String(parseInt(y)+1)).replace('10-01','09-30');
+const myAvData = myAvSnap.exists() ? {[uid]: myAvSnap.val()} : {};
 const past = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today()&&e.date>=_ss&&e.date<=_se);
-const attended = past.filter(e=>(e.rsvps||{})[uid]==='yes').length;
-const pct = past.length ? Math.round(attended/past.length*100) : null;
+const pastExclAway = eventsExcludingAway(past, myAvData, uid);
+const attended = pastExclAway.filter(e=>(e.rsvps||{})[uid]==='yes').length;
+const pct = pastExclAway.length ? Math.round(attended/pastExclAway.length*100) : null;
 if (pct !== null) {
 const t = Number(threshold);
 const banner = document.createElement('div');
@@ -1876,15 +1891,20 @@ const upcoming = allEvs.filter(e => e.date >= today());
 const pastPractices = past.filter(e=>e.type==='Practice');
 const pastRaces = past.filter(e=>e.type==='Race');
 const pastSocials = past.filter(e=>e.type==='Otter S.O.C.I.A.L');
-const attPractices = pastPractices.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
-const attRaces = pastRaces.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
-const attSocials = pastSocials.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
+const profileAvData = avSnap.exists() ? {[p.uid]: avSnap.val()} : {};
+const pastPracticesExcl = eventsExcludingAway(pastPractices, profileAvData, p.uid);
+const pastRacesExcl = eventsExcludingAway(pastRaces, profileAvData, p.uid);
+const pastSocialsExcl = eventsExcludingAway(pastSocials, profileAvData, p.uid);
+const attPractices = pastPracticesExcl.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
+const attRaces = pastRacesExcl.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
+const attSocials = pastSocialsExcl.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
 const totalAtt = attPractices + attRaces + attSocials;
+const totalPastExcl = pastPracticesExcl.length + pastRacesExcl.length + pastSocialsExcl.length;
 const totalPast = past.length;
-const attPct = totalPast ? Math.round(totalAtt/totalPast*100) : null;
-const practicePct = pastPractices.length ? Math.round(attPractices/pastPractices.length*100) : null;
-const racePct = pastRaces.length ? Math.round(attRaces/pastRaces.length*100) : null;
-const socialPct = pastSocials.length ? Math.round(attSocials/pastSocials.length*100) : null;
+const attPct = totalPastExcl ? Math.round(totalAtt/totalPastExcl*100) : null;
+const practicePct = pastPracticesExcl.length ? Math.round(attPractices/pastPracticesExcl.length*100) : null;
+const racePct = pastRacesExcl.length ? Math.round(attRaces/pastRacesExcl.length*100) : null;
+const socialPct = pastSocialsExcl.length ? Math.round(attSocials/pastSocialsExcl.length*100) : null;
 const pendingRsvp = upcoming.filter(e=>!(e.rsvps||{})[p.uid]).length;
 const upcomingGoing = upcoming.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
 const recent6 = [...past].reverse().slice(0,6);
@@ -2161,13 +2181,15 @@ db.ref('users/'+memberUid).get(),
 db.ref('profileMedia/'+memberUid).get(),
 db.ref('profileNotes/'+memberUid).get(),
 db.ref('events').get(),
-]).then(([uSnap, mediaSnap, notesSnap, evSnap]) => {
+db.ref('availability/'+memberUid).get(),
+]).then(([uSnap, mediaSnap, notesSnap, evSnap, memAvSnap]) => {
 const m = uSnap.val(); if (!m) return;
 const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
 const noteItems = Object.entries(notesSnap.val()||{}).filter(([,n])=>n.isCoach).sort((a,b)=>b[1].ts-a[1].ts);
 const allEvs = Object.values(evSnap.val()||{});
+const memAvData = memAvSnap.exists() ? {[memberUid]: memAvSnap.val()} : {};
 const past = allEvs.filter(e=>e.date<today());
-const pastPrac = past.filter(e=>e.type==='Practice');
+const pastPrac = eventsExcludingAway(past.filter(e=>e.type==='Practice'), memAvData, memberUid);
 const attPrac = pastPrac.filter(e=>(e.rsvps||{})[memberUid]==='yes').length;
 const pracPct = pastPrac.length ? Math.round(attPrac/pastPrac.length*100) : null;
 const sides = Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
@@ -2840,7 +2862,8 @@ function seasonStartForDate(dateStr) {
 function _pgAttendanceBody() {
 if (!can.view()) return;
 const C = document.getElementById('stats-tab-body');
-Promise.all([db.ref('users').get(), db.ref('events').get()]).then(([uSnap,evSnap]) => {
+Promise.all([db.ref('users').get(), db.ref('events').get(), db.ref('availability').get()]).then(([uSnap,evSnap,allAvSnap]) => {
+const allAvData = allAvSnap.val()||{};
 const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
 const allPractices = Object.values(evSnap.val()||{})
   .filter(e => e.type === 'Practice' && e.date < today())
@@ -2871,13 +2894,16 @@ C.innerHTML = seasonPicker + `<div class="card" style="padding:0"><div class="em
 return;
 }
 const memberStats = members.map(m => {
-const attended = events.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-const pct = Math.round(attended/events.length*100);
-return { ...m, attended, pct };
+const membEvs = eventsExcludingAway(events, allAvData, m.uid);
+const attended = membEvs.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+const pct = membEvs.length ? Math.round(attended/membEvs.length*100) : 0;
+return { ...m, attended, total: membEvs.length, pct };
 });
 const eventStats = events.map(ev => {
-const yes = members.filter(m=>(ev.rsvps||{})[m.uid]==='yes').length;
-return { ...ev, yes, pct: Math.round(yes/members.length*100) };
+// For team view: only count members who weren't away that day
+const presentMembers = members.filter(m=>!isAwayOnDate(allAvData, m.uid, ev.date));
+const yes = presentMembers.filter(m=>(ev.rsvps||{})[m.uid]==='yes').length;
+return { ...ev, yes, pct: presentMembers.length ? Math.round(yes/presentMembers.length*100) : 0 };
 });
 C.innerHTML = seasonPicker + `
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
@@ -2888,13 +2914,13 @@ C.innerHTML = seasonPicker + `
 </select>
 </div>
 <div id="att-view-body"></div>`;
-window._attData = { members, memberStats, events, eventStats };
+window._attData = { members, memberStats, events, eventStats, allAvData };
 renderAttView('individual');
 });
 }
 window.renderAttView = function(view) {
 const body = document.getElementById('att-view-body'); if(!body) return;
-const { members, memberStats, events, eventStats } = window._attData;
+const { members, memberStats, events, eventStats, allAvData } = window._attData;
 const sel = document.getElementById('att-view-sel'); if(sel) sel.value = view;
 if (view === 'individual') {
 const canEdit = can.edit();
@@ -2906,12 +2932,14 @@ const rows = memberStats.map(m=>{
 const cells=events.map(ev=>{
 const r=(ev.rsvps||{})[m.uid];
 if (canEdit) {
+const isAwayCellEdit = typeof isAwayOnDate === 'function' && isAwayOnDate(allAvData, m.uid, ev.date);
 const nextVal = r==='yes' ? 'no' : r==='no' ? null : 'yes';
-const icon = r==='yes'?'<span style="color:var(--success);font-size:15px">✓</span>':r==='no'?'<span style="color:var(--danger);font-size:15px">✗</span>':'<span style="color:var(--border-strong);font-size:13px">—</span>';
-const tip = r==='yes'?'Click to mark absent':r==='no'?'Click to clear':'Click to mark attended';
-return `<td style="text-align:center"><button title="${tip}" onclick="toggleAttendance('${ev.id}','${m.uid}','${nextVal||''}',this)" style="background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:6px;transition:background 0.1s" onmouseover="this.style.background='var(--surface-alt)'" onmouseout="this.style.background=''">${icon}</button></td>`;
+const icon = r==='yes'?'<span style="color:var(--success);font-size:15px">✓</span>':r==='no'?'<span style="color:var(--danger);font-size:15px">✗</span>':isAwayCellEdit?'<span style="font-size:13px">🏖</span>':'<span style="color:var(--border-strong);font-size:13px">—</span>';
+const tip = r==='yes'?'Click to mark absent':r==='no'?'Click to clear':isAwayCellEdit?'On vacation (click to override)':'Click to mark attended';
+return `<td style="text-align:center${isAwayCellEdit&&!r?' opacity:0.5;background:var(--surface-alt)':''}"><button title="${tip}" onclick="toggleAttendance('${ev.id}','${m.uid}','${nextVal||''}',this)" style="background:none;border:none;cursor:pointer;padding:6px 10px;border-radius:6px;transition:background 0.1s" onmouseover="this.style.background='var(--surface-alt)'" onmouseout="this.style.background=''">${icon}</button></td>`;
 }
-return `<td style="text-align:center">${r==='yes'?'<span style="color:var(--success);font-size:15px">✓</span>':r==='no'?'<span style="color:var(--danger);font-size:15px">✗</span>':'<span style="color:var(--border-strong)">—</span>'}</td>`;
+const isAwayCellFn = typeof isAwayOnDate === 'function' && isAwayOnDate(allAvData, m.uid, ev.date);
+return `<td style="text-align:center${isAwayCellFn?' opacity:0.4;background:var(--surface-alt)':''}" title="${isAwayCellFn?'On vacation':''}">` + (r==='yes'?'<span style="color:var(--success);font-size:15px">✓</span>':r==='no'?'<span style="color:var(--danger);font-size:15px">✗</span>':isAwayCellFn?'<span style="font-size:13px" title="On vacation">🏖</span>':'<span style="color:var(--border-strong)">—</span>') + '</td>';
 }).join('');
 return `<tr>
 <td style="position:sticky;left:0;background:var(--surface);z-index:2;border-right:1px solid var(--border);min-width:150px;padding:10px 14px">
@@ -2932,7 +2960,7 @@ return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
 <span style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap">${m.pct}%</span>
 </div>
 </div>
-<div style="width:36px;font-size:12px;color:var(--text-3);text-align:right;flex-shrink:0">${m.attended}/${events.length}</div>
+<div style="width:36px;font-size:12px;color:var(--text-3);text-align:right;flex-shrink:0">${m.attended}/${m.total!=null?m.total:events.length}</div>
 </div>`;
 }).join('');
 body.innerHTML = `
@@ -2940,7 +2968,7 @@ body.innerHTML = `
 <div class="dash-section-title" style="margin:0 0 12px">Attendance by member</div>
 ${chartBars}
 </div>
-<div style="font-size:13px;color:var(--text-3);margin-bottom:8px">Detailed grid — ${events.length} past practice${events.length!==1?'s':''} · Scroll right →${canEdit?' · <strong style="color:var(--accent)">Click any cell to edit attendance</strong>':''}</div>
+<div style="font-size:13px;color:var(--text-3);margin-bottom:8px">Detailed grid — ${events.length} past practice${events.length!==1?'s':''} · Scroll right →${canEdit?' · <strong style="color:var(--accent)">Click any cell to edit attendance</strong>':''} · Rates exclude vacation periods</div>
 <div style="overflow-x:auto;border-radius:12px;border:1px solid var(--border);box-shadow:var(--shadow)">
 <table style="width:max-content;min-width:100%;border-collapse:collapse;font-size:14px;background:var(--surface)">
 <thead style="position:sticky;top:0;z-index:3"><tr>
@@ -4077,7 +4105,8 @@ pgAttendance();
 return;
 }
 const uid=currentUser.uid;
-Promise.all([db.ref('users').get(),db.ref('events').get()]).then(([uSnap,evSnap])=>{
+Promise.all([db.ref('users').get(),db.ref('events').get(),db.ref('availability').get()]).then(([uSnap,evSnap,lbAvSnap])=>{
+const lbAvData=lbAvSnap.val()||{};
 const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
 const activeSeason = window._selectedSeason || currentSeasonStart();
 const seasonEnd = activeSeason.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
@@ -4085,13 +4114,15 @@ const events=Object.values(evSnap.val()||{}).filter(e=>e.date<today()&&e.date>=a
 const practices=events.filter(e=>e.type==='Practice');
 const races=events.filter(e=>e.type==='Race');
 const stats=members.map(m=>{
-const pAtt=practices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-const rAtt=races.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-const total=events.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-const pPct=practices.length?Math.round(pAtt/practices.length*100):0;
+const mPractices=eventsExcludingAway(practices,lbAvData,m.uid);
+const mRaces=eventsExcludingAway(races,lbAvData,m.uid);
+const pAtt=mPractices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+const rAtt=mRaces.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+const total=eventsExcludingAway(events,lbAvData,m.uid).filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+const pPct=mPractices.length?Math.round(pAtt/mPractices.length*100):0;
 const practicesSorted=[...practices].sort((a,b)=>b.date.localeCompare(a.date));
 let streak=0;
-for(const ev of practicesSorted){if((ev.rsvps||{})[m.uid]==='yes')streak++;else break;}
+for(const ev of practicesSorted){if(isAwayOnDate(lbAvData,m.uid,ev.date))continue;if((ev.rsvps||{})[m.uid]==='yes')streak++;else break;}
 return {...m,pAtt,rAtt,total,pPct,streak};
 });
 const maxStreak=Math.max(...stats.map(s=>s.streak),0);
@@ -4614,10 +4645,12 @@ await db.ref('messages/'+key).set({ fromUid:currentUser.uid, toUid, text, ts:Dat
 closeModal(); showToast('Message sent ✓','💬');
 navigate('messaging');
 };
-function renderGoalsSection(p, allEvs) {
+function renderGoalsSection(p, allEvs, goalsAvData) {
 const past = allEvs.filter(e=>e.date<today());
-const pastPrac = past.filter(e=>e.type==='Practice');
-const pastRace = past.filter(e=>e.type==='Race');
+const pastPracAll = past.filter(e=>e.type==='Practice');
+const pastRaceAll = past.filter(e=>e.type==='Race');
+const pastPrac = eventsExcludingAway(pastPracAll, goalsAvData||{}, p.uid);
+const pastRace = eventsExcludingAway(pastRaceAll, goalsAvData||{}, p.uid);
 const attPrac = pastPrac.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
 const attRace = pastRace.filter(e=>(e.rsvps||{})[p.uid]==='yes').length;
 const goals = p.goals||{};
@@ -4875,10 +4908,11 @@ C2.appendChild(accountCard);
 setTimeout(()=>{
 const uid = currentUser?.uid;
 if (!uid) return;
-Promise.all([db.ref('events').get(), db.ref('users/'+uid).get()]).then(([evSnap, uSnap])=>{
+Promise.all([db.ref('events').get(), db.ref('users/'+uid).get(), db.ref('availability/'+uid).get()]).then(([evSnap, uSnap, myGoalAvSnap])=>{
 const p2 = uSnap.val(); if (!p2) return;
 const allEvs = Object.values(evSnap.val()||{});
-const goalHtml = renderGoalsSection(p2, allEvs);
+const myGoalAvData = myGoalAvSnap.exists() ? {[uid]: myGoalAvSnap.val()} : {};
+const goalHtml = renderGoalsSection(p2, allEvs, myGoalAvData);
 const editTitle = document.querySelector('#pg-content .dash-section-title:last-of-type');
 if (editTitle) {
 const goalDiv = document.createElement('div');
