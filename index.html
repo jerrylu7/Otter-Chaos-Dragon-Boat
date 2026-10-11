@@ -1229,19 +1229,28 @@ ${noReply.length?noReply.map(m=>`<div style="display:flex;align-items:center;gap
 }
 const BOAT_TYPE_ROWS = { 10: 5, 20: 10, 24: 12 };
 function boatTypeLabel(n) { return n+'-person'; }
+window._boatSettingsCache = null;
 function renderEvDetailLineup(evId, ev, members, lineup) {
 const body = document.getElementById('ev-detail-body'); if(!body) return;
 const ed = can.edit();
 const uid = currentUser.uid;
+const doRender = (defaultBoatType, defaultBoatCount) => {
+const boatType = ev.boatType || defaultBoatType || 20;
+const boatCount = ev.boatCount || defaultBoatCount || 1;
+const ROWS = BOAT_TYPE_ROWS[boatType] || 10;
+renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType, boatCount);
+};
+if (window._boatSettingsCache) {
+doRender(window._boatSettingsCache.boatType, window._boatSettingsCache.boatCount);
+} else {
 Promise.all([
 db.ref('settings/boatType').get(),
 db.ref('settings/boatCount').get(),
 ]).then(([typeSnap, countSnap]) => {
-const boatType = ev.boatType || typeSnap.val() || 20;
-const boatCount = ev.boatCount || countSnap.val() || 1;
-const ROWS = BOAT_TYPE_ROWS[boatType] || 10;
-renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType, boatCount);
+window._boatSettingsCache = { boatType: typeSnap.val(), boatCount: countSnap.val() };
+doRender(typeSnap.val(), countSnap.val());
 });
+}
 }
 function renderLineupBody(evId, ev, members, lineup, body, ed, uid, ROWS, boatType, boatCount) {
 const goingUids = new Set(Object.entries(ev.rsvps||{}).filter(([,v])=>v==='yes').map(([k])=>k));
@@ -5094,6 +5103,7 @@ window._currentBoat = 1;
 window.changeLineupBoatType = async function(evId, newType, domEvent) {
 if (domEvent) { domEvent.preventDefault(); domEvent.stopPropagation(); }
 if (!can.edit()) return;
+window._boatSettingsCache = null;
 await db.ref('events/'+evId+'/boatType').set(Number(newType));
 if (window._evPage) window._evPage.ev.boatType = Number(newType);
 showToast('Boat type updated for this event 🛶');
@@ -5109,6 +5119,7 @@ return false;
 window.changeLineupBoatCount = async function(evId, newCount, domEvent) {
 if (domEvent) { domEvent.preventDefault(); domEvent.stopPropagation(); }
 if (!can.edit()) return;
+window._boatSettingsCache = null;
 await db.ref('events/'+evId+'/boatCount').set(Number(newCount));
 if (window._evPage) window._evPage.ev.boatCount = Number(newCount);
 window._currentBoat = 1;
