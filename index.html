@@ -1287,8 +1287,8 @@ const isGuest = memberUid && memberUid.startsWith('guest:');
 const isGoing = memberUid && (isGuest || goingUids.has(memberUid));
 const warnStyle = memberUid && !isGoing ? 'border-color:var(--warning);background:var(--warning-bg)' : '';
 const style = isMe ? 'background:var(--accent-bg);border-color:var(--accent)' : warnStyle;
-const click = ed ? `onclick="evdPickSeat('${evId}','${key}')"` : '';
-return `<div class="seat-slot${name?' filled':''}${ed?' editable':''}${(key==='drummer'||key==='steers')?' seat-slot-center':''}" data-key="${key}" ${click} style="${style};min-height:40px">
+const click = ed ? `onclick="evdPickSeat('${evId}','${key}')" ontouchend="event.preventDefault();evdPickSeat('${evId}','${key}')"` : '';
+return `<div class="seat-slot${name?' filled':''}${ed?' editable':''}${(key==='drummer'||key==='steers')?' seat-slot-center':''}" data-key="${key}" ${click} style="${style};min-height:40px;touch-action:manipulation">
 ${name
 ? `<div class="avatar" style="width:22px;height:22px;font-size:9px;${isGuest?'background:var(--warning-bg);color:var(--warning-text)':memberUid&&!isGoing?'background:var(--warning-bg);color:var(--warning-text)':''}">${initials(name)}</div>
 <div style="flex:1;min-width:0">
@@ -1440,6 +1440,8 @@ return boat > 1 ? 'lineups/'+evId+'_boat'+boat : 'lineups/'+evId;
 }
 window.evdPickSeat = function(evId, key) {
 if(!can.edit()) return;
+// Don't open picker if this seat was just cleared (prevents race with evdClrSeat)
+if(window._clrSeatKey === evId+'|'+key && window._clrSeatTs && Date.now()-window._clrSeatTs < 1500) return;
 Promise.all([
 db.ref('users').get(),
 db.ref(lineupPath(evId)).get(),
@@ -1581,13 +1583,20 @@ return;
 }
 const lSnap = await db.ref(path).get();
 const newLineup = lSnap.val()||{};
+console.log('[evdClrSeat] key still in lineup after remove?', key in newLineup);
+// If Firebase rules silently rejected the remove, delete locally so UI stays consistent
+if (key in newLineup) {
+delete newLineup[key];
+showToast('⚠️ Check Firebase rules — remove may not have persisted');
+} else {
+showToast('Seat cleared ✓');
+}
 if(window._evPage) {
 window._evPage.lineup = newLineup;
 renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, newLineup);
 } else {
 console.warn('[evdClrSeat] _evPage is null, cannot re-render');
 }
-showToast('Seat cleared ✓');
 };
 const APPS_SCRIPT_URL = "YOUR_APPS_SCRIPT_URL";
 function sendRSVP(memberId, eventId, response) {
