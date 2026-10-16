@@ -1910,7 +1910,7 @@ db.ref('settings/attendanceThreshold').get(),
 db.ref('availability/'+p.uid).get(),
 db.ref('users/'+p.uid+'/goals').get(),
 ]).then(([evSnap, lSnap, mediaSnap, notesSnap, threshSnap, avSnap, goalsSnap]) => {
-const allEvs = Object.values(evSnap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
+const allEvs = Object.values(evSnap.val()||{}).filter(e=>canSeeEvent(e)).sort((a,b)=>a.date.localeCompare(b.date));
 const lineups = lSnap.val()||{};
 const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
 const noteItems = Object.entries(notesSnap.val()||{}).sort((a,b)=>b[1].ts-a[1].ts);
@@ -2217,7 +2217,7 @@ db.ref('availability/'+memberUid).get(),
 const m = uSnap.val(); if (!m) return;
 const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
 const noteItems = Object.entries(notesSnap.val()||{}).filter(([,n])=>n.isCoach).sort((a,b)=>b[1].ts-a[1].ts);
-const allEvs = Object.values(evSnap.val()||{});
+const allEvs = Object.values(evSnap.val()||{}).filter(e=>canSeeEvent(e));
 const memAvData = memAvSnap.exists() ? {[memberUid]: memAvSnap.val()} : {};
 const past = allEvs.filter(e=>e.date<today());
 const pastPrac = eventsExcludingAway(past.filter(e=>e.type==='Practice'), memAvData, memberUid);
@@ -4939,7 +4939,7 @@ const uid = currentUser?.uid;
 if (!uid) return;
 Promise.all([db.ref('events').get(), db.ref('users/'+uid).get(), db.ref('availability/'+uid).get()]).then(([evSnap, uSnap, myGoalAvSnap])=>{
 const p2 = uSnap.val(); if (!p2) return;
-const allEvs = Object.values(evSnap.val()||{});
+const allEvs = Object.values(evSnap.val()||{}).filter(e=>canSeeEvent(e));
 const myGoalAvData = myGoalAvSnap.exists() ? {[uid]: myGoalAvSnap.val()} : {};
 const goalHtml = renderGoalsSection(p2, allEvs, myGoalAvData);
 const editTitle = document.querySelector('#pg-content .dash-section-title:last-of-type');
