@@ -704,7 +704,8 @@ const sStart = currentSeasonStart();
 const sEnd = sStart.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
 const past = allEvents.filter(e => e.date < now && e.date >= sStart && e.date <= sEnd);
 const pendingCount = allUpcoming.filter(e => !(e.rsvps||{})[uid]).length;
-const pastExclAway = eventsExcludingAway(past, avSnap.val()||{}, uid);
+const pastPractices = past.filter(e => e.type === 'Practice');
+const pastExclAway = eventsExcludingAway(pastPractices, avSnap.val()||{}, uid);
 const attendedPast = pastExclAway.filter(e => (e.rsvps||{})[uid]==='yes').length;
 const attPct = pastExclAway.length ? Math.round(attendedPast/pastExclAway.length*100) : null;
 const hour = new Date().getHours();
@@ -1932,7 +1933,7 @@ const attSocials = pastSocialsExcl.filter(e=>(e.rsvps||{})[p.uid]==='yes').lengt
 const totalAtt = attPractices + attRaces + attSocials;
 const totalPastExcl = pastPracticesExcl.length + pastRacesExcl.length + pastSocialsExcl.length;
 const totalPast = past.length;
-const attPct = totalPastExcl ? Math.round(totalAtt/totalPastExcl*100) : null;
+const attPct = pastPracticesExcl.length ? Math.round(attPractices/pastPracticesExcl.length*100) : null;
 const practicePct = pastPracticesExcl.length ? Math.round(attPractices/pastPracticesExcl.length*100) : null;
 const racePct = pastRacesExcl.length ? Math.round(attRaces/pastRacesExcl.length*100) : null;
 const socialPct = pastSocialsExcl.length ? Math.round(attSocials/pastSocialsExcl.length*100) : null;
@@ -1992,7 +1993,7 @@ C.innerHTML=`${threshBanner}
 </div>
 <div style="max-width:720px">
 <div class="dash-section-title">My statistics</div>
-<div class="dash-stats" style="margin-bottom:16px">${statBlock(totalPast,'Total events','var(--text)')}${statBlock(totalAtt,'Attended','var(--success)')}${statBlock(attPct!=null?attPct+'%':'—','Overall rate',attPct==null?'var(--text-3)':attPct>=80?'var(--success)':attPct>=50?'var(--warning)':'var(--danger)')}${statBlock(pendingRsvp,'Awaiting RSVP',pendingRsvp>0?'var(--warning)':'var(--text-3)')}</div>
+<div class="dash-stats" style="margin-bottom:16px">${statBlock(totalPast,'Total events','var(--text)')}${statBlock(totalAtt,'Attended','var(--success)')}${statBlock(attPct!=null?attPct+'%':'—','Practice rate',attPct==null?'var(--text-3)':attPct>=80?'var(--success)':attPct>=50?'var(--warning)':'var(--danger)')}${statBlock(pendingRsvp,'Awaiting RSVP',pendingRsvp>0?'var(--warning)':'var(--text-3)')}</div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">
 <div class="card" style="padding:16px"><div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🚣 Practices</div><div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${practicePct==null?'var(--text-3)':practicePct>=(threshold||80)?'var(--success)':practicePct>=(threshold||80)*0.75?'var(--warning)':'var(--danger)'}">${practicePct!=null?practicePct+'%':'—'}</div><div style="font-size:13px;color:var(--text-3);margin-top:2px">${attPractices} / ${pastPractices.length} attended</div></div>
 <div class="card" style="padding:16px"><div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">🏁 Races</div><div style="font-size:28px;font-weight:800;letter-spacing:-1px;color:${racePct==null?'var(--text-3)':racePct>=80?'var(--success)':racePct>=50?'var(--warning)':'var(--danger)'}">${racePct!=null?racePct+'%':'—'}</div><div style="font-size:13px;color:var(--text-3);margin-top:2px">${attRaces} / ${pastRaces.length} attended</div></div>
