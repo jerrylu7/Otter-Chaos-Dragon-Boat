@@ -2474,13 +2474,25 @@ if (first) { document.getElementById('lineup-sel').value=first; loadLineup(first
 }
 window.loadLineup = evId => {
 if (!evId) { document.getElementById('lineup-body').innerHTML=''; return; }
-db.ref('users').get().then(uSnap => {
-trackListener(db.ref('lineups/'+evId), 'value', lSnap => {
-drawBoat(evId, lSnap.val()||{}, Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled));
+window._currentBoat = 1; // reset to boat 1 when switching events
+Promise.all([
+db.ref('users').get(),
+db.ref('events/'+evId).get(),
+db.ref('settings/boatType').get(),
+db.ref('settings/boatCount').get(),
+]).then(([uSnap, evSnap, typeSnap, countSnap]) => {
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
+const ev = evSnap.val()||{};
+const boatType = ev.boatType || typeSnap.val() || 20;
+const boatCount = ev.boatCount || countSnap.val() || 1;
+const ROWS = BOAT_TYPE_ROWS[boatType] || 10;
+trackListener(db.ref(lineupPath(evId)), 'value', lSnap => {
+drawBoat(evId, lSnap.val()||{}, members, ROWS, boatType, boatCount);
 });
 });
 };
-function drawBoat(evId, lineup, members) {
+function drawBoat(evId, lineup, members, ROWS, boatType, boatCount) {
+ROWS = ROWS || 10;
 const body = document.getElementById('lineup-body');
 if (!body) return;
 const ed = can.edit();
@@ -2503,7 +2515,7 @@ ${ed?`<button class="btn btn-sm btn-ghost" onclick="event.stopPropagation();clrS
 const seated = new Set(Object.values(lineup).filter(Boolean));
 const unassigned = members.filter(m=>!seated.has(m.uid));
 let rows = '';
-for (let r=1; r<=10; r++) {
+for (let r=1; r<=ROWS; r++) {
 const lM = members.find(m=>m.uid===lineup[`row${r}_left`]);
 const rM = members.find(m=>m.uid===lineup[`row${r}_right`]);
 rows += slot(`row${r}_left`,lM);
@@ -2540,14 +2552,18 @@ ${unassigned.length
 </div>
 </div>` : ''}`;
 }
-window.clrSeat = async (evId, key) => { if(!can.edit())return; await db.ref('lineups/'+evId+'/'+key).remove(); showToast('Seat cleared'); };
+window.clrSeat = async (evId, key) => {
+if(!can.edit()) return;
+await db.ref(lineupPath(evId)+'/'+key).remove();
+showToast('Seat cleared ✓');
+};
 window.pickSeat = evId_key => {
 const [evId, key] = arguments.length===2 ? [arguments[0],arguments[1]] : evId_key.split('||');
 };
 window.pickSeat = function(evId, key) {
 if (!can.edit()) return; closeModal();
 db.ref('users').get().then(uSnap => {
-db.ref('lineups/'+evId).get().then(lSnap => {
+db.ref(lineupPath(evId)).get().then(lSnap => {
 const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
 const lineup = lSnap.val()||{};
 const seated = new Set(Object.entries(lineup).filter(([k,v])=>k!==key&&v).map(([,v])=>v));
@@ -2578,7 +2594,7 @@ document.getElementById('seat-q')?.focus();
 });
 };
 window.filterSeats = q => { document.querySelectorAll('#seat-list .rsvp-row').forEach(r=>r.style.display=r.textContent.toLowerCase().includes(q.toLowerCase())?'':'none'); };
-window.assignSeat = async (evId,key,uid) => { if(!can.edit())return; await db.ref('lineups/'+evId+'/'+key).set(uid); closeModal(); showToast('Seat assigned','🚣'); };
+window.assignSeat = async (evId,key,uid) => { if(!can.edit())return; await db.ref(lineupPath(evId)+'/'+key).set(uid); closeModal(); showToast('Seat assigned','🚣'); };
 function pgEvents() {
 if (!can.view()) { navigate('practices'); return; }
 const C = document.getElementById('pg-content');
