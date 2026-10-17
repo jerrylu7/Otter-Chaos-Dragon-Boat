@@ -5555,6 +5555,8 @@ let touchOffsetY = 0;
 seats.forEach(el => {
 el.addEventListener('touchstart', e => {
 if (e.touches.length !== 1) return;
+// If the user tapped the remove button, let it handle its own click — don't drag
+if (e.target.closest('.rm-seat')) return;
 const touch = e.touches[0];
 touchDragKey = el.dataset.key;
 touchClone = el.cloneNode(true);
