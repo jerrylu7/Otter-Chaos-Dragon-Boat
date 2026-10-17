@@ -1570,37 +1570,38 @@ const el=document.getElementById('edt-'+t); if(el) el.classList.toggle('active',
 showToast('Seat assigned','🚣');
 };
 window.evdClrSeat = async function(evId, key) {
+showToast('⏳ Step 1: button tapped','🔧');
 const debKey = evId+'|'+key;
 const now = Date.now();
-if(window._clrSeatTs && window._clrSeatKey===debKey && now-window._clrSeatTs<2000) return;
+if(window._clrSeatTs && window._clrSeatKey===debKey && now-window._clrSeatTs<2000) {
+showToast('⚠️ Debounce blocked — tap again in 2s');
+return;
+}
 window._clrSeatTs = now; window._clrSeatKey = debKey;
-console.log('[evdClrSeat] called', evId, key, 'can.edit=', can.edit());
-if(!can.edit()) { showToast('No edit permission','⚠️'); return; }
+if(!can.edit()) { showToast('⚠️ No edit permission'); return; }
+showToast('⏳ Step 2: has edit permission','🔧');
 const path = lineupPath(evId);
-console.log('[evdClrSeat] removing path:', path+'/'+key);
+showToast('⏳ Step 3: path='+path+'/'+key,'🔧');
 try {
 await db.ref(path+'/'+key).remove();
-console.log('[evdClrSeat] remove succeeded');
+showToast('⏳ Step 4: remove() done','🔧');
 } catch(e) {
-showToast('Could not remove seat — check Firebase rules','⚠️');
-console.error('[evdClrSeat] remove error:', e);
+showToast('❌ Firebase remove failed: '+e.message);
 return;
 }
 const lSnap = await db.ref(path).get();
 const newLineup = lSnap.val()||{};
-console.log('[evdClrSeat] key still in lineup after remove?', key in newLineup);
-// If Firebase rules silently rejected the remove, delete locally so UI stays consistent
 if (key in newLineup) {
 delete newLineup[key];
-showToast('⚠️ Check Firebase rules — remove may not have persisted');
+showToast('⚠️ Firebase rules blocked remove — UI only');
 } else {
-showToast('Seat cleared ✓');
+showToast('✓ Seat cleared!');
 }
 if(window._evPage) {
 window._evPage.lineup = newLineup;
 renderEvDetailLineup(evId, window._evPage.ev, window._evPage.members, newLineup);
 } else {
-console.warn('[evdClrSeat] _evPage is null, cannot re-render');
+showToast('⚠️ _evPage is null');
 }
 };
 const APPS_SCRIPT_URL = "YOUR_APPS_SCRIPT_URL";
