@@ -1289,19 +1289,19 @@ const isGoing = memberUid && (isGuest || goingUids.has(memberUid));
 const warnStyle = memberUid && !isGoing ? 'border-color:var(--warning);background:var(--warning-bg)' : '';
 const style = isMe ? 'background:var(--accent-bg);border-color:var(--accent)' : warnStyle;
 // Wrapper has no click handler — only the inner assign-area and rm-btn are interactive
-return `<div class="seat-slot${name?' filled':''}${ed?' editable':''}${(key==='drummer'||key==='steers')?' seat-slot-center':''}" data-key="${key}" style="${style};min-height:40px;position:relative" ${ed&&name?`onclick="if(!event.target.closest('.rm-seat'))evdPickSeat('${evId}','${key}')"`:(ed?`onclick="evdPickSeat('${evId}','${key}')"`:'')} >
+return `<div class="seat-slot${name?' filled':''}${ed?' editable':''}${(key==='drummer'||key==='steers')?' seat-slot-center':''}" data-key="${key}" style="${style};min-height:40px;position:relative">
 ${name
-? `<div class="seat-assign-area" style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;padding-right:${ed?'28px':'0'};pointer-events:none">
+? `<button class="seat-assign-area" ${ed?`onclick="evdPickSeat('${evId}','${key}')"`:''} style="display:flex;align-items:center;gap:6px;flex:1;min-width:0;${ed?'max-width:calc(100% - 30px)':''};background:none;border:none;text-align:left;cursor:${ed?'pointer':'default'};padding:0;font:inherit;color:inherit">
 <div class="avatar" style="width:22px;height:22px;font-size:9px;flex-shrink:0;${isGuest?'background:var(--warning-bg);color:var(--warning-text)':memberUid&&!isGoing?'background:var(--warning-bg);color:var(--warning-text)':''}">${initials(name)}</div>
 <div style="flex:1;min-width:0;overflow:hidden">
 <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}${isMe?' (you)':''}</div>
 ${memberUid&&!isGoing?'<div style="font-size:10px;color:var(--warning-text);font-weight:600">⚠ not confirmed</div>':''}
 </div>
-</div>
-${ed?`<button class="rm-seat" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();evdClrSeat('${evId}','${key}')">✕</button>`:''}`
-: `<div class="seat-assign-area" style="display:flex;align-items:center;flex:1;pointer-events:none">
+</button>
+${ed?`<button class="rm-seat" onclick="event.stopPropagation();evdClrSeat('${evId}','${key}')">✕</button>`:''}`
+: `<button class="seat-assign-area" ${ed?`onclick="evdPickSeat('${evId}','${key}')"`:''} style="display:flex;align-items:center;flex:1;background:none;border:none;cursor:${ed?'pointer':'default'};font:inherit;color:inherit;padding:0">
 <span class="seat-empty" style="font-size:11px">${ed?'+ assign':''}</span>
-</div>`}
+</button>`}
 </div>`;
 }
 let rows = '';
