@@ -704,7 +704,8 @@ const sStart = currentSeasonStart();
 const sEnd = sStart.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
 const past = allEvents.filter(e => e.date < now && e.date >= sStart && e.date <= sEnd);
 const pendingCount = allUpcoming.filter(e => !(e.rsvps||{})[uid]).length;
-const pastPractices = past.filter(e => e.type === 'Practice');
+const joinedDate = p.joinedAt ? new Date(p.joinedAt).toISOString().slice(0,10) : null;
+const pastPractices = past.filter(e => e.type === 'Practice' && (!joinedDate || e.date >= joinedDate));
 const pastExclAway = eventsExcludingAway(pastPractices, avSnap.val()||{}, uid);
 const attendedPast = pastExclAway.filter(e => (e.rsvps||{})[uid]==='yes').length;
 const attPct = pastExclAway.length ? Math.round(attendedPast/pastExclAway.length*100) : null;
@@ -1788,7 +1789,8 @@ const threshold = threshSnap.val();
 if (threshold != null && uid) {
 const _ss=currentSeasonStart(),_se=_ss.replace(/^(\d+)/,y=>String(parseInt(y)+1)).replace('10-01','09-30');
 const myAvData = myAvSnap.exists() ? {[uid]: myAvSnap.val()} : {};
-const past = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today()&&e.date>=_ss&&e.date<=_se);
+const _myJoinedDate = currentProfile?.joinedAt ? new Date(currentProfile.joinedAt).toISOString().slice(0,10) : null;
+const past = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today()&&e.date>=_ss&&e.date<=_se&&(!_myJoinedDate||e.date>=_myJoinedDate));
 const pastExclAway = eventsExcludingAway(past, myAvData, uid);
 const attended = pastExclAway.filter(e=>(e.rsvps||{})[uid]==='yes').length;
 const pct = pastExclAway.length ? Math.round(attended/pastExclAway.length*100) : null;
@@ -1919,9 +1921,10 @@ const seasonStart = currentSeasonStart();
 const seasonEnd = seasonStart.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
 const past = allEvs.filter(e => e.date < today() && e.date >= seasonStart && e.date <= seasonEnd);
 const upcoming = allEvs.filter(e => e.date >= today());
-const pastPractices = past.filter(e=>e.type==='Practice');
-const pastRaces = past.filter(e=>e.type==='Race');
-const pastSocials = past.filter(e=>e.type==='Otter S.O.C.I.A.L');
+const memberJoinedDate = p.joinedAt ? new Date(p.joinedAt).toISOString().slice(0,10) : null;
+const pastPractices = past.filter(e=>e.type==='Practice' && (!memberJoinedDate || e.date >= memberJoinedDate));
+const pastRaces = past.filter(e=>e.type==='Race' && (!memberJoinedDate || e.date >= memberJoinedDate));
+const pastSocials = past.filter(e=>e.type==='Otter S.O.C.I.A.L' && (!memberJoinedDate || e.date >= memberJoinedDate));
 const profileAvData = avSnap.exists() ? {[p.uid]: avSnap.val()} : {};
 const pastPracticesExcl = eventsExcludingAway(pastPractices, profileAvData, p.uid);
 const pastRacesExcl = eventsExcludingAway(pastRaces, profileAvData, p.uid);
@@ -2939,7 +2942,8 @@ C.innerHTML = seasonPicker + `<div class="card" style="padding:0"><div class="em
 return;
 }
 const memberStats = members.map(m => {
-const membEvs = eventsExcludingAway(events, allAvData, m.uid);
+const mJoinedDate = m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : null;
+const membEvs = eventsExcludingAway(events.filter(e=>!mJoinedDate||e.date>=mJoinedDate), allAvData, m.uid);
 const attended = membEvs.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const pct = membEvs.length ? Math.round(attended/membEvs.length*100) : 0;
 return { ...m, attended, total: membEvs.length, pct };
@@ -4159,8 +4163,9 @@ const events=Object.values(evSnap.val()||{}).filter(e=>e.date<today()&&e.date>=a
 const practices=events.filter(e=>e.type==='Practice');
 const races=events.filter(e=>e.type==='Race');
 const stats=members.map(m=>{
-const mPractices=eventsExcludingAway(practices,lbAvData,m.uid);
-const mRaces=eventsExcludingAway(races,lbAvData,m.uid);
+const mJoinedDate=m.joinedAt?new Date(m.joinedAt).toISOString().slice(0,10):null;
+const mPractices=eventsExcludingAway(practices.filter(e=>!mJoinedDate||e.date>=mJoinedDate),lbAvData,m.uid);
+const mRaces=eventsExcludingAway(races.filter(e=>!mJoinedDate||e.date>=mJoinedDate),lbAvData,m.uid);
 const pAtt=mPractices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const rAtt=mRaces.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const total=eventsExcludingAway(events,lbAvData,m.uid).filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
