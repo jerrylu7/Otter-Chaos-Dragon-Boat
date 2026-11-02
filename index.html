@@ -687,15 +687,15 @@ C.innerHTML = `
 </div>
 <div class="loading-full" style="min-height:120px"><div class="spinner"></div></div>`;
 Promise.all([
-dbCachedGet('events', 30000),
-dbCachedGet('lineups', 30000),
-can.edit() ? dbCachedGet('availability', 60000) : db.ref('availability/'+currentUser.uid).get().then(s=>({val:()=>s.exists()?{[currentUser.uid]:s.val()}:{}})),
+db.ref('events').orderByChild('date').get(),
+db.ref('lineups').get(),
+can.edit() ? db.ref('availability').get() : db.ref('availability/'+currentUser.uid).get().then(s=>({val:()=>s.exists()?{[currentUser.uid]:s.val()}:{}})),
 can.edit() ? dbCachedGet('users', 120000) : Promise.resolve({val:()=>({})}),
 dbCachedGet('breaks', 120000),
 can.edit() ? dbCachedGet('coachSchedule', 60000) : Promise.resolve({val:()=>({})}),
 ]).then(([evSnap, lineupSnap, avSnap, uSnap, breaksSnap, csSnap]) => {
 const allEvents = Object.values(evSnap.val()||{})
-.filter(e => canSeeEvent(e))
+.filter(e => canSeeEvent(e) && e.date)
 .sort((a,b)=>a.date.localeCompare(b.date));
 const lineups = lineupSnap.val()||{};
 const now = today();
@@ -797,7 +797,6 @@ if (can.edit()) {
 }
 }).catch(err => {
 console.error('Dashboard load error:', err?.code, err?.message, err);
-showToast('Dashboard error: ' + (err?.message||err?.code||String(err)), '❌');
 const friendlyMsg = err?.message?.includes('indexOn') || err?.message?.includes('Index')
 ? "We're having an otter-ly hard time finding your events! Ask your admin to add <code>.indexOn: date</code> to the Firebase rules."
 : err?.message?.includes('permission') || err?.message?.includes('Permission')
