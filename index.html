@@ -1197,9 +1197,11 @@ const body = document.getElementById('ev-detail-body'); if(!body) return;
 const myRsvp = (ev.rsvps||{})[uid]||'';
 const mySeatKey = Object.entries(lineup).find(([k,v])=>v===uid)?.[0];
 const mySeat = mySeatKey ? mySeatKey.replace(/_/g,' ') : null;
-const goingMembers = members.filter(m=>(ev.rsvps||{})[m.uid]==='yes');
-const notGoing = members.filter(m=>(ev.rsvps||{})[m.uid]==='no');
-const noReply = members.filter(m=>!(ev.rsvps||{})[m.uid]);
+// For invite-only events, only show invitees in the RSVP lists
+const relevantMembers = ev.exclusive ? members.filter(m => !!(ev.invitees||{})[m.uid]) : members;
+const goingMembers = relevantMembers.filter(m=>(ev.rsvps||{})[m.uid]==='yes');
+const notGoing = relevantMembers.filter(m=>(ev.rsvps||{})[m.uid]==='no');
+const noReply = relevantMembers.filter(m=>!(ev.rsvps||{})[m.uid]);
 body.innerHTML = `
 
 <div class="card" style="padding:16px;margin-bottom:16px">
@@ -1682,7 +1684,8 @@ if(!can.edit())return;
 closeModal();
 const [evSnap,uSnap]=await Promise.all([db.ref('events/'+evId).get(),dbCachedGet('users', 120000)]);
 const ev=evSnap.val(); if(!ev)return;
-const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
+const allMembers=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
+const members=ev.exclusive?allMembers.filter(m=>!!(ev.invitees||{})[m.uid]):allMembers;
 const overlay=document.createElement('div');overlay.className='overlay';
 overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
 overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
