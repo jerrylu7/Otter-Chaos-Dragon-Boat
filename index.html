@@ -2426,7 +2426,7 @@ ${['Paddler','Caller','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddle
 <div class="form-group"><label class="form-label">Emergency contact</label><input id="mf-emerg" value="${esc(m?.emergency||'')}" placeholder="Name · Phone"></div>
 </div>
 <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-${m&&m.uid?'<button class="btn btn-ghost btn-sm" style="color:'+(m.disabled?'var(--success-text)':'var(--danger-text)')+';" onclick="toggleMemberDisabled(\''+m.uid+'\','+(m.disabled?'true':'false')+')">'+(m.disabled?'✓ Re-enable account':'⏸ Disable account')+'</button>':'<div></div>'}
+${m&&m.uid?'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" style="color:'+(m.disabled?'var(--success-text)':'var(--danger-text)')+';" onclick="toggleMemberDisabled(\''+m.uid+'\'\','+(m.disabled?'true':'false')+')">'+(m.disabled?'✓ Re-enable account':'⏸ Disable account')+'</button><button class="btn btn-ghost btn-sm" style="color:var(--accent);" onclick="adminResetPassword(\''+m.email+'\')">✉ Reset password</button></div>':'<div></div>'}
 <div style="display:flex;gap:8px">
 <button class="btn" onclick="closeModal()">Cancel</button>
 <button class="btn btn-primary" onclick="saveMember('${m?.uid||''}',${isNew})">Save</button>
@@ -5811,6 +5811,17 @@ window.deleteBreak = async function(breakKey) {
 };
 
 // ── Disable / re-enable member account ───────────────────────────────────────
+window.adminResetPassword = async function(email) {
+  if (!can.admin()) return;
+  if (!email) { showToast('No email on file for this member'); return; }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    showToast('Password reset email sent to ' + email + ' ✓');
+  } catch(e) {
+    showToast('Failed to send reset email: ' + e.message);
+  }
+};
+
 window.toggleMemberDisabled = async function(uid, currentlyDisabled) {
   if (!can.admin()) return;
   const action = currentlyDisabled ? 're-enable' : 'disable';
