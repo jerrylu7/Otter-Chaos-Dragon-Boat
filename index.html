@@ -1924,7 +1924,7 @@ dbCachedGet('settings/attendanceThreshold', 300000),
 withTimeout(db.ref('availability/'+p.uid).get(), 10000, 'availability'),
 withTimeout(db.ref('users/'+p.uid+'/goals').get(), 10000, 'goals'),
 ]).then(([evSnap, lSnap, mediaSnap, notesSnap, threshSnap, avSnap, goalsSnap]) => {
-const allEvs = Object.values(evSnap.val()||{}).filter(e=>canSeeEvent(e)).sort((a,b)=>a.date.localeCompare(b.date));
+const allEvs = Object.values(evSnap.val()||{}).filter(e=>canSeeEvent(e)&&e.date).sort((a,b)=>a.date.localeCompare(b.date));
 const lineups = lSnap.val()||{};
 const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
 const noteItems = Object.entries(notesSnap.val()||{}).sort((a,b)=>b[1].ts-a[1].ts);
