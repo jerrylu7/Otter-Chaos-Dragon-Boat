@@ -815,6 +815,9 @@ C2.innerHTML = `<div class="card" style="padding:24px;text-align:center;max-widt
 </div>`;
 }
 }, 3000);
+}).catch(e => {
+  const C = document.getElementById('pg-content');
+  if (C) C.innerHTML = '<div class="card" style="padding:24px;text-align:center"><p style="color:var(--danger-text);font-size:15px;font-weight:600">⚠️ Dashboard failed to load</p><p style="color:var(--text-3);font-size:13px">' + e.message + '</p><button class="btn btn-primary" style="margin-top:12px" onclick="pgDashboard()">Retry</button></div>';
 });
 }
 function getBCHolidays(year) {
@@ -1236,11 +1239,17 @@ function boatTypeLabel(n) { return n+'-person'; }
 window._boatSettingsCache = null;
 // Simple TTL cache for heavy Firebase reads (60s TTL)
 window._dbCache = {};
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error((label||'Request')+' timed out after '+ms+'ms')), ms))
+  ]);
+}
 function dbCachedGet(path, ttlMs) {
   ttlMs = ttlMs || 60000;
   const c = window._dbCache[path];
   if (c && (Date.now() - c.ts) < ttlMs) return Promise.resolve(c.snap);
-  return db.ref(path).get().then(snap => {
+  return withTimeout(db.ref(path).get(), 12000, path).then(snap => {
     window._dbCache[path] = { snap, ts: Date.now() };
     return snap;
   });
@@ -1909,11 +1918,11 @@ const isCoach = can.edit();
 Promise.all([
 dbCachedGet('events', 30000),
 dbCachedGet('lineups', 30000),
-db.ref('profileMedia/'+p.uid).get(),
-db.ref('profileNotes/'+p.uid).get(),
+withTimeout(db.ref('profileMedia/'+p.uid).get(), 10000, 'profileMedia'),
+withTimeout(db.ref('profileNotes/'+p.uid).get(), 10000, 'profileNotes'),
 dbCachedGet('settings/attendanceThreshold', 300000),
-db.ref('availability/'+p.uid).get(),
-db.ref('users/'+p.uid+'/goals').get(),
+withTimeout(db.ref('availability/'+p.uid).get(), 10000, 'availability'),
+withTimeout(db.ref('users/'+p.uid+'/goals').get(), 10000, 'goals'),
 ]).then(([evSnap, lSnap, mediaSnap, notesSnap, threshSnap, avSnap, goalsSnap]) => {
 const allEvs = Object.values(evSnap.val()||{}).filter(e=>canSeeEvent(e)).sort((a,b)=>a.date.localeCompare(b.date));
 const lineups = lSnap.val()||{};
@@ -2065,6 +2074,11 @@ ${x.reason?`<div style="font-size:12px;color:var(--text-3)">${esc(x.reason)}</di
 <button class="btn btn-primary" style="margin-top:8px" onclick="saveProfile()">Save changes</button>
 </div>
 </div>`;
+}).catch(e => {
+  document.getElementById('pg-content').innerHTML = '<div class="card" style="padding:24px;text-align:center;color:var(--danger-text)">⚠️ Failed to load profile: ' + e.message + '<br><br><button class="btn btn-primary" onclick="pgProfile()">Retry</button></div>';
+}).catch(e => {
+  const C = document.getElementById('pg-content');
+  if (C) C.innerHTML = '<div class="card" style="padding:24px;text-align:center"><p style="color:var(--danger-text);font-size:15px;font-weight:600">⚠️ Profile failed to load</p><p style="color:var(--text-3);font-size:13px">' + e.message + '</p><button class="btn btn-primary" style="margin-top:12px" onclick="pgProfile()">Retry</button></div>';
 });
 }
 window.uploadProfileMedia = async function(memberUid, input) {
