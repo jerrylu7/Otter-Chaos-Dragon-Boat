@@ -2086,7 +2086,17 @@ ${x.reason?`<div style="font-size:12px;color:var(--text-3)">${esc(x.reason)}</di
 </div>
 <button class="btn btn-primary" style="margin-top:8px" onclick="saveProfile()">Save changes</button>
 </div>
-</div>`;
+</div>
+
+<div class="dash-section-title">Change email</div>
+<div class="card" style="padding:20px;margin-bottom:20px">
+<div style="font-size:13px;color:var(--text-3);margin-bottom:14px">Current email: <strong>${esc(p.email)}</strong></div>
+<div class="form-group"><label class="form-label">New email address</label><input id="pf-new-email" type="email" placeholder="new@example.com" autocomplete="off"></div>
+<div class="form-group"><label class="form-label">Current password (required to confirm)</label><input id="pf-email-pwd" type="password" placeholder="Your current password" autocomplete="current-password"></div>
+<button class="btn btn-primary btn-sm" onclick="changeMyEmail()">Update email</button>
+<div id="pf-email-msg" style="margin-top:10px;font-size:13px"></div>
+</div>
+\`;
 }).catch(e => {
   const C = document.getElementById('pg-content');
   if (C) C.innerHTML = '<div class="card" style="padding:24px;text-align:center"><p style="color:var(--danger-text);font-size:15px;font-weight:600">⚠️ Profile failed to load</p><p style="color:var(--text-3);font-size:13px">' + e.message + '</p><button class="btn btn-primary" style="margin-top:12px" onclick="pgProfile()">Retry</button></div>';
@@ -2141,6 +2151,36 @@ await db.ref('profileNotes/'+memberUid+'/'+key).remove();
 showToast('Note deleted','🗑');
 pgProfile();
 };
+window.changeMyEmail = async function() {
+  const newEmail = document.getElementById('pf-new-email')?.value.trim();
+  const pwd = document.getElementById('pf-email-pwd')?.value;
+  const msgEl = document.getElementById('pf-email-msg');
+  if (!newEmail) { if(msgEl) msgEl.innerHTML='<span style="color:var(--danger-text)">Please enter a new email address.</span>'; return; }
+  if (!pwd) { if(msgEl) msgEl.innerHTML='<span style="color:var(--danger-text)">Please enter your current password to confirm.</span>'; return; }
+  if(msgEl) msgEl.innerHTML='<span style="color:var(--text-3)">Verifying…</span>';
+  try {
+    // Re-authenticate first (required by Firebase before sensitive operations)
+    const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, pwd);
+    await currentUser.reauthenticateWithCredential(cred);
+    // Update email in Firebase Auth
+    await currentUser.updateEmail(newEmail);
+    // Update email in the users database record too
+    await db.ref('users/'+currentUser.uid+'/email').set(newEmail);
+    currentProfile.email = newEmail;
+    if(msgEl) msgEl.innerHTML='<span style="color:var(--success-text)">✓ Email updated to '+newEmail+'</span>';
+    document.getElementById('pf-new-email').value = '';
+    document.getElementById('pf-email-pwd').value = '';
+    showToast('Email updated ✓');
+  } catch(e) {
+    let msg = e.message;
+    if (e.code === 'auth/wrong-password') msg = 'Incorrect password.';
+    else if (e.code === 'auth/email-already-in-use') msg = 'That email is already in use by another account.';
+    else if (e.code === 'auth/invalid-email') msg = 'Invalid email address.';
+    else if (e.code === 'auth/requires-recent-login') msg = 'Session expired — please sign out and back in, then try again.';
+    if(msgEl) msgEl.innerHTML='<span style="color:var(--danger-text)">⚠️ '+msg+'</span>';
+  }
+};
+
 window.saveProfile = async function() {
 const uid=currentUser.uid;
 const updates={ weight:document.getElementById('pf-weight').value, sides:['Left','Right','Both'].filter(s=>document.getElementById('pf-side-'+s.toLowerCase())?.checked), paddlerRoles:['Paddler','Caller','Steers'].filter(p=>document.getElementById('pf-pos-'+p.toLowerCase())?.checked), emergency:document.getElementById('pf-emerg').value.trim() };
