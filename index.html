@@ -454,9 +454,20 @@ const events = Object.values(evSnap.val()).filter(e => e.name); // all event typ
 for (const ev of events) {
 const sentKey = `${ev.id}_${todayStr}`.replace(/[.#$[\]]/g,'_');
 if (sentLog[sentKey]) continue;
+// Determine event category for notification filtering
+const evType = ev.type || '';
+const isPractice = evType === 'Practice';
+const isRace = evType === 'Race';
+const isSocial = evType === 'Otter S.O.C.I.A.L';
 const needsRsvp = allUsers.filter(m => {
-const rsvp = (ev.rsvps||{})[m.uid];
-return !rsvp;
+  const rsvp = (ev.rsvps||{})[m.uid];
+  if (rsvp) return false; // already replied
+  // Check notification prefs — default ON if not set
+  const prefs = m.notifyPrefs || {};
+  if (isPractice && prefs.practices === false) return false;
+  if (isRace && prefs.races === false) return false;
+  if (isSocial && prefs.socials === false) return false;
+  return true;
 });
 for (const member of needsRsvp) {
 try {
@@ -2500,6 +2511,15 @@ ${['Paddler','Caller','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddle
 </div>
 </div>
 <div class="form-group"><label class="form-label">Emergency contact</label><input id="mf-emerg" value="${esc(m?.emergency||'')}" placeholder="Name · Phone"></div>
+<div class="form-group" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+<label class="form-label" style="margin-bottom:8px">📧 Email &amp; push notifications</label>
+<div style="display:flex;flex-direction:column;gap:6px">
+<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="mf-notify-practices" ${(m?.notifyPrefs?.practices!==false)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> Practice reminders</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="mf-notify-races" ${(m?.notifyPrefs?.races!==false)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> Race reminders</label>
+<label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" id="mf-notify-socials" ${(m?.notifyPrefs?.socials!==false)?'checked':''} style="width:auto;padding:0;border:none;box-shadow:none"> Social event reminders</label>
+</div>
+<div style="font-size:11px;color:var(--text-3);margin-top:6px">Unchecked = member won't receive reminders for that event type.</div>
+</div>
 </div>
 <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
 ${m&&m.uid?'<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" style="color:'+(m.disabled?'var(--success-text)':'var(--danger-text)')+'" onclick="toggleMemberDisabled(\''+m.uid+'\','+(m.disabled?'true':'false')+')">'+(m.disabled?'✓ Re-enable account':'⏸ Disable account')+'</button><button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="adminResetPassword(\''+m.email+'\')">✉ Reset password</button></div>':'<div></div>'}
@@ -2519,6 +2539,11 @@ sides: ['Left','Right','Both'].filter(s=>document.getElementById('mf-side-'+s.to
 paddlerRoles: ['Paddler','Caller','Steers'].filter(p=>document.getElementById('mf-pos-'+p.toLowerCase())?.checked),
 weight: document.getElementById('mf-weight').value,
 emergency: document.getElementById('mf-emerg').value.trim(),
+notifyPrefs: {
+  practices: document.getElementById('mf-notify-practices')?.checked !== false ? !!document.getElementById('mf-notify-practices')?.checked : false,
+  races: document.getElementById('mf-notify-races')?.checked !== false ? !!document.getElementById('mf-notify-races')?.checked : false,
+  socials: document.getElementById('mf-notify-socials')?.checked !== false ? !!document.getElementById('mf-notify-socials')?.checked : false,
+},
 };
 if (isNew) {
 const first=document.getElementById('mf-first').value.trim(),
