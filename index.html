@@ -726,7 +726,8 @@ const sStart = currentSeasonStart();
 const sEnd = sStart.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
 const past = allEvents.filter(e => e.date < now && e.date >= sStart && e.date <= sEnd);
 const pendingCount = allUpcoming.filter(e => !(e.rsvps||{})[uid]).length;
-const pastPractices = past.filter(e => e.type === 'Practice');
+const myJoinedDate = p.joinedAt ? new Date(p.joinedAt).toISOString().slice(0,10) : null;
+const pastPractices = past.filter(e => e.type === 'Practice' && (!myJoinedDate || e.date >= myJoinedDate));
 const pastExclAway = eventsExcludingAway(pastPractices, avSnap.val()||{}, uid);
 const attendedPast = pastExclAway.filter(e => (e.rsvps||{})[uid]==='yes').length;
 const attPct = pastExclAway.length ? Math.round(attendedPast/pastExclAway.length*100) : null;
@@ -2511,6 +2512,7 @@ ${['Paddler','Caller','Steers'].map(pos=>{const checked=(Array.isArray(m?.paddle
 </div>
 </div>
 <div class="form-group"><label class="form-label">Emergency contact</label><input id="mf-emerg" value="${esc(m?.emergency||'')}" placeholder="Name · Phone"></div>
+<div class="form-group"><label class="form-label">First practice date</label><input id="mf-joined" type="date" value="${m?.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : ''}"><div style="font-size:11px;color:var(--text-3);margin-top:4px">Only practices/races on or after this date count toward attendance rate.</div></div>
 <div class="form-group" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
 <label class="form-label" style="margin-bottom:8px">📧 Email &amp; push notifications</label>
 <div style="display:flex;flex-direction:column;gap:6px">
@@ -2545,6 +2547,10 @@ notifyPrefs: {
   socials: document.getElementById('mf-notify-socials')?.checked !== false ? !!document.getElementById('mf-notify-socials')?.checked : false,
 },
 };
+const joinedDateVal = document.getElementById('mf-joined')?.value;
+if (joinedDateVal) {
+  updates.joinedAt = new Date(joinedDateVal + 'T00:00:00').getTime();
+}
 if (isNew) {
 const first=document.getElementById('mf-first').value.trim(),
 last =document.getElementById('mf-last').value.trim(),
