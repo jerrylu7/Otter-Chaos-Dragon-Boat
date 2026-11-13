@@ -5308,9 +5308,6 @@ function renderBringingSection(evId, uid) {
 const body = document.getElementById('ev-detail-body'); if (!body) return;
 db.ref('bringing/'+evId).get().then(snap => {
 const entries = snap.val()||{};
-const myEntry = Object.entries(entries).find(([,b])=>b.uid===uid);
-const myKey = myEntry?.[0];
-const my = myEntry?.[1];
 const byCategory = {};
 BRINGING_CATEGORIES.forEach(c=>{ byCategory[c.key]=[]; });
 Object.entries(entries).forEach(([key,b])=>{
@@ -5342,9 +5339,8 @@ ${b.uid===uid?`<button onclick="removeBringing('${evId}','${b.key}')" style="bac
 </div>
 </div>`;
 }).join('')}
-${!myEntry ? `
 <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
-<div style="font-size:13px;font-weight:600;margin-bottom:8px">I'm bringing…</div>
+<div style="font-size:13px;font-weight:600;margin-bottom:8px">Add something…</div>
 <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
 ${BRINGING_CATEGORIES.map(cat=>`
 <button id="bring-cat-${cat.key}" onclick="selectBringingCategory('${cat.key}')"
@@ -5356,12 +5352,7 @@ ${cat.icon} ${cat.label}
 style="margin-bottom:8px;font-size:13px" oninput="updateBringingNote(this.value)">
 <button class="btn btn-sm btn-primary" onclick="submitBringing('${evId}','${uid}')">Add</button>
 <div id="bring-note-preview" style="font-size:12px;color:var(--text-3);margin-top:4px"></div>
-</div>` : `
-<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--text-3)">
-✓ You're bringing ${BRINGING_CATEGORIES.find(c=>c.key===my.category)?.icon||''} <strong>${BRINGING_CATEGORIES.find(c=>c.key===my.category)?.label||my.category}</strong>${my.note?' — '+esc(my.note):''}
-<button onclick="removeBringing('${evId}','${myKey}')" class="btn btn-sm btn-ghost" style="margin-left:8px;color:var(--danger-text)">Change</button>
-</div>`}
-`;
+</div>`;
 if (!existing) body.appendChild(section);
 });
 }
