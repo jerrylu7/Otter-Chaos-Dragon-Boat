@@ -3052,7 +3052,8 @@ C.innerHTML = seasonPicker + `<div class="card" style="padding:0"><div class="em
 return;
 }
 const memberStats = members.map(m => {
-const membEvs = eventsExcludingAway(events, allAvData, m.uid);
+const mJoined = m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : null;
+const membEvs = eventsExcludingAway(events.filter(e => !mJoined || e.date >= mJoined), allAvData, m.uid);
 const attended = membEvs.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const pct = membEvs.length ? Math.round(attended/membEvs.length*100) : 0;
 return { ...m, attended, total: membEvs.length, pct };
@@ -4272,16 +4273,17 @@ const events=Object.values(evSnap.val()||{}).filter(e=>e.date<today()&&e.date>=a
 const practices=events.filter(e=>e.type==='Practice');
 const races=events.filter(e=>e.type==='Race');
 const stats=members.map(m=>{
-const mPractices=eventsExcludingAway(practices,lbAvData,m.uid);
-const mRaces=eventsExcludingAway(races,lbAvData,m.uid);
+const mJoined=m.joinedAt?new Date(m.joinedAt).toISOString().slice(0,10):null;
+const mPractices=eventsExcludingAway(practices.filter(e=>!mJoined||e.date>=mJoined),lbAvData,m.uid);
+const mRaces=eventsExcludingAway(races.filter(e=>!mJoined||e.date>=mJoined),lbAvData,m.uid);
 const pAtt=mPractices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const rAtt=mRaces.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-const total=eventsExcludingAway(events,lbAvData,m.uid).filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+const total=eventsExcludingAway(events.filter(e=>!mJoined||e.date>=mJoined),lbAvData,m.uid).filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const pPct=mPractices.length?Math.round(pAtt/mPractices.length*100):0;
 const practicesSorted=[...practices].sort((a,b)=>b.date.localeCompare(a.date));
 let streak=0;
 for(const ev of practicesSorted){if(isAwayOnDate(lbAvData,m.uid,ev.date))continue;if((ev.rsvps||{})[m.uid]==='yes')streak++;else break;}
-return {...m,pAtt,rAtt,total,pPct,streak};
+return {...m,pAtt,rAtt,total,pPct,streak,mPracticeCount:mPractices.length};
 });
 const maxStreak=Math.max(...stats.map(s=>s.streak),0);
 const maxPract=Math.max(...stats.map(s=>s.pAtt),0);
@@ -4310,7 +4312,7 @@ return `<div style="display:flex;align-items:center;gap:12px;padding:14px 18px;b
 <div class="avatar">${initials(s.name)}</div>
 <div style="flex:1;min-width:0">
 <div style="font-weight:700;font-size:14px">${esc(s.name)}${isMe?' <span style="font-size:11px;color:var(--accent)">(you)</span>':''}</div>
-<div style="font-size:12px;color:var(--text-3)">${s.pAtt}/${practices.length} practices · ${s.streak} streak · ${s.rAtt} races</div>
+<div style="font-size:12px;color:var(--text-3)">${s.pAtt}/${s.mPracticeCount} practices · ${s.streak} streak · ${s.rAtt} races</div>
 ${bs.length?`<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">${bs.map(b=>`<span style="font-size:10px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;padding:1px 7px">${b}</span>`).join('')}</div>`:''}
 </div>
 <div style="font-size:22px;font-weight:800;color:${pctColor(s.pPct)};flex-shrink:0">${s.pPct}%</div>
@@ -4356,14 +4358,20 @@ const practices=events.filter(e=>e.type==='Practice');
 const races=events.filter(e=>e.type==='Race');
 const socials=events.filter(e=>e.type==='Otter S.O.C.I.A.L');
 const teamAvg=members.length?Math.round(members.reduce((a,m)=>{
-const att=practices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-return a+(practices.length?att/practices.length*100:0);
+const mJoined=m.joinedAt?new Date(m.joinedAt).toISOString().slice(0,10):null;
+const mPracs=practices.filter(e=>!mJoined||e.date>=mJoined);
+const att=mPracs.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+return a+(mPracs.length?att/mPracs.length*100:0);
 },0)/members.length):0;
 const memberCards=members.map(m=>{
-const pA=practices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-const rA=races.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-const sA=socials.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-const pPct=practices.length?Math.round(pA/practices.length*100):null;
+const mJoined=m.joinedAt?new Date(m.joinedAt).toISOString().slice(0,10):null;
+const mPracs=practices.filter(e=>!mJoined||e.date>=mJoined);
+const mRaces=races.filter(e=>!mJoined||e.date>=mJoined);
+const mSocials=socials.filter(e=>!mJoined||e.date>=mJoined);
+const pA=mPracs.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+const rA=mRaces.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+const sA=mSocials.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+const pPct=mPracs.length?Math.round(pA/mPracs.length*100):null;
 const practicesSorted=[...practices].sort((a,b)=>b.date.localeCompare(a.date));
 let streak=0;for(const ev of practicesSorted){if((ev.rsvps||{})[m.uid]==='yes')streak++;else break;}
 const trend=pPct!==null?(pPct>=80?'↑':pPct>=50?'→':'↓'):'—';
@@ -5762,9 +5770,12 @@ window.archiveSeason = async function(seasonStart) {
   const socials   = events.filter(e=>e.type==='Otter S.O.C.I.A.L');
 
   const memberStats = members.map(m => {
-    const pAtt = practices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-    const rAtt = races.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
-    const pPct = practices.length ? Math.round(pAtt/practices.length*100) : 0;
+    const mJoined = m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : null;
+    const mPracs = practices.filter(e=>!mJoined||e.date>=mJoined);
+    const mRaces = races.filter(e=>!mJoined||e.date>=mJoined);
+    const pAtt = mPracs.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+    const rAtt = mRaces.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
+    const pPct = mPracs.length ? Math.round(pAtt/mPracs.length*100) : 0;
     return { uid:m.uid, name:m.name, pAtt, rAtt, pPct };
   });
 
