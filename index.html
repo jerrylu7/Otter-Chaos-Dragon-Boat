@@ -2259,6 +2259,32 @@ await db.ref('fitnessTests/'+memberUid+'/'+key).remove();
 showToast('Test deleted','🗑');
 pgProfile();
 };
+window.saveMemberFitnessTest = async function(memberUid) {
+if (!can.edit()) return;
+const dateVal = document.getElementById('mp-ft-date')?.value;
+if (!dateVal) { showToast('Please enter a test date','⚠️'); return; }
+const FITNESS_KEYS = ['deadhang','squats','pushups','distJump','plank','pullups','erg','running'];
+const result = { date: dateVal, recordedBy: currentProfile.name, recordedAt: Date.now() };
+const noteVal = document.getElementById('mp-ft-note')?.value?.trim();
+if (noteVal) result.note = noteVal;
+let hasData = false;
+FITNESS_KEYS.forEach(k => {
+  const v = document.getElementById('mp-ft-'+k)?.value?.trim();
+  if (v) { result[k] = v; hasData = true; }
+});
+if (!hasData) { showToast('Enter at least one result','⚠️'); return; }
+const key = db.ref('fitnessTests/'+memberUid).push().key;
+await db.ref('fitnessTests/'+memberUid+'/'+key).set(result);
+showToast('Fitness test saved ✓','💪');
+openMemberProfile(memberUid);
+};
+window.deleteMemberFitnessTest = async function(memberUid, key) {
+if (!can.edit()) return;
+if (!confirm('Delete this fitness test result?')) return;
+await db.ref('fitnessTests/'+memberUid+'/'+key).remove();
+showToast('Test deleted','🗑');
+openMemberProfile(memberUid);
+};
 window.changeMyEmail = async function() {
   const newEmail = document.getElementById('pf-new-email')?.value.trim();
   const pwd = document.getElementById('pf-email-pwd')?.value;
@@ -2392,16 +2418,49 @@ db.ref('profileMedia/'+memberUid).get(),
 db.ref('profileNotes/'+memberUid).get(),
 db.ref('events').get(),
 db.ref('availability/'+memberUid).get(),
-]).then(([uSnap, mediaSnap, notesSnap, evSnap, memAvSnap]) => {
+db.ref('fitnessTests/'+memberUid).get(),
+]).then(([uSnap, mediaSnap, notesSnap, evSnap, memAvSnap, ftSnap]) => {
 const m = uSnap.val(); if (!m) return;
 const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
 const noteItems = Object.entries(notesSnap.val()||{}).filter(([,n])=>n.isCoach).sort((a,b)=>b[1].ts-a[1].ts);
 const allEvs = Object.values(evSnap.val()||{}).filter(e=>canSeeEvent(e));
 const memAvData = memAvSnap.exists() ? {[memberUid]: memAvSnap.val()} : {};
 const past = allEvs.filter(e=>e.date<today());
-const pastPrac = eventsExcludingAway(past.filter(e=>e.type==='Practice'), memAvData, memberUid);
+const mJoinedDt = m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0,10) : null;
+const pastPrac = eventsExcludingAway(past.filter(e=>e.type==='Practice'&&(!mJoinedDt||e.date>=mJoinedDt)), memAvData, memberUid);
 const attPrac = pastPrac.filter(e=>(e.rsvps||{})[memberUid]==='yes').length;
 const pracPct = pastPrac.length ? Math.round(attPrac/pastPrac.length*100) : null;
+const ftTests = Object.entries(ftSnap.val()||{}).sort((a,b)=>b[1].date.localeCompare(a[1].date));
+const FT_FIELDS = [
+  {key:'deadhang',label:'Deadhang',unit:'mm:ss',icon:'🤲'},
+  {key:'squats',label:'Squats',unit:'total',icon:'🏋️'},
+  {key:'pushups',label:'Pushups',unit:'total',icon:'💪'},
+  {key:'distJump',label:'Distance Jump',unit:'inches',icon:'⬆️'},
+  {key:'plank',label:'Plank',unit:'mm:ss',icon:'🧘'},
+  {key:'pullups',label:'Pull Ups',unit:'reps',icon:'🔝'},
+  {key:'erg',label:'ERG',unit:'m/2min',icon:'🚣'},
+  {key:'running',label:'Running',unit:'mm:ss',icon:'🏃'},
+];
+const latestFt = ftTests[0]?.[1] || null;
+const ftHtml = `<hr style="margin:18px 0">
+<div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">💪 Fitness tests</div>
+${latestFt ? `<div style="font-size:11px;color:var(--text-3);margin-bottom:8px">Latest — ${fmtDate(latestFt.date)}${latestFt.note?' · '+esc(latestFt.note):''}</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px;margin-bottom:12px">
+${FT_FIELDS.map(f=>{const v=latestFt[f.key];return v?`<div style="background:var(--surface-alt);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px"><div style="font-size:10px;color:var(--text-3);margin-bottom:3px">${f.icon} ${f.label}</div><div style="font-size:15px;font-weight:700">${esc(v)}</div><div style="font-size:9px;color:var(--text-3)">${f.unit}</div></div>`:''}).join('')}
+</div>` : `<div style="color:var(--text-3);font-size:13px;margin-bottom:10px">No fitness tests recorded yet.</div>`}
+${ftTests.length>1?`<details style="margin-bottom:10px"><summary style="font-size:12px;font-weight:600;cursor:pointer;color:var(--accent);list-style:none">▶ Test history (${ftTests.length} tests)</summary><div style="margin-top:8px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr><th style="padding:5px 8px;text-align:left;background:var(--surface-alt);border-bottom:1px solid var(--border)">Date</th>${FT_FIELDS.map(f=>`<th style="padding:5px 8px;text-align:center;background:var(--surface-alt);border-bottom:1px solid var(--border)">${f.icon} ${f.label}</th>`).join('')}</tr></thead><tbody>${ftTests.map(([key,t])=>`<tr style="border-bottom:1px solid var(--border)"><td style="padding:6px 8px;font-weight:600;white-space:nowrap">${fmtDate(t.date)}${can.edit()?` <button onclick="deleteMemberFitnessTest('${memberUid}','${key}')" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:10px" title="Delete">✕</button>`:''}</td>${FT_FIELDS.map(f=>`<td style="padding:6px 8px;text-align:center">${t[f.key]||'—'}</td>`).join('')}</tr>`).join('')}</tbody></table></div></details>`:''}
+${can.edit()?`<div style="margin-top:10px${latestFt||ftTests.length>1?';padding-top:10px;border-top:1px solid var(--border)':''}">
+<div style="font-size:12px;font-weight:600;margin-bottom:8px">Record new test</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+<div class="form-group" style="margin:0"><label class="form-label" style="font-size:11px">Date *</label><input type="date" id="mp-ft-date" value="${today()}" style="font-size:13px"></div>
+<div class="form-group" style="margin:0"><label class="form-label" style="font-size:11px">Note</label><input id="mp-ft-note" placeholder="e.g. Nov 2026 test" style="font-size:13px"></div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin-bottom:10px">
+${FT_FIELDS.map(f=>`<div class="form-group" style="margin:0"><label class="form-label" style="font-size:11px">${f.icon} ${f.label} <span style="font-weight:400;color:var(--text-3)">(${f.unit})</span></label><input id="mp-ft-${f.key}" style="font-size:13px"></div>`).join('')}
+</div>
+<button class="btn btn-sm btn-primary" onclick="saveMemberFitnessTest('${memberUid}')">Save test</button>
+</div>`:''}
+`;
 const sides = Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
 const roles = Array.isArray(m.paddlerRoles)?m.paddlerRoles:m.paddlerRole?[m.paddlerRole]:['Paddler'];
 const overlay = document.createElement('div'); overlay.className='overlay';
@@ -2459,6 +2518,7 @@ ${isVid?`<video src="${esc(item.url)}" muted></video><div class="media-play">▶
 </label>
 <div id="mp-upload-progress" style="font-size:12px;color:var(--text-3);margin-top:4px"></div>
 </div>
+${ftHtml}
 <hr style="margin:18px 0">
 
 <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">🏅 Coaching notes</div>
