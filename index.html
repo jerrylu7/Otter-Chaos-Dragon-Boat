@@ -718,7 +718,7 @@ can.edit() ? dbCachedGet('coachSchedule', 60000) : Promise.resolve({val:()=>({})
 ]).then(([evSnap, lineupSnap, avSnap, uSnap, breaksSnap, csSnap]) => {
 const allEvents = Object.values(evSnap.val()||{})
 .filter(e => canSeeEvent(e) && e.date)
-.sort((a,b)=>a.date.localeCompare(b.date));
+.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 const lineups = lineupSnap.val()||{};
 const now = today();
 const allUpcoming = allEvents.filter(e => e.date >= now);
@@ -1032,7 +1032,7 @@ const oneWeekOut=new Date(); oneWeekOut.setDate(oneWeekOut.getDate()+7);
 const weekStr=oneWeekOut.toISOString().slice(0,10);
 const pending = allEvents.filter(e=>e.date>=now && !(e.rsvps||{})[uid]);
 const thisWeek = allEvents.filter(e=>e.date>=now && e.date<=weekStr && (e.rsvps||{})[uid]);
-const toShow = [...pending,...thisWeek].sort((a,b)=>a.date.localeCompare(b.date));
+const toShow = [...pending,...thisWeek].sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 const titleEl = document.getElementById('pending-section-title');
 if(titleEl) titleEl.textContent = pending.length>0 ? `Needs your reply (${pending.length})` : "This week's events";
 if(!toShow.length){
@@ -1088,7 +1088,7 @@ db.ref('users').get(),
 db.ref('lineups/'+evId).get(),
 ]).then(([evSnap, uSnap, lineupSnap]) => {
 const ev = evSnap.val(); if (!ev) return;
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
 const lineup = lineupSnap.val()||{};
 const uid = currentUser.uid;
 const memberUidSet = new Set(members.map(m=>m.uid));
@@ -1589,7 +1589,7 @@ const aYes = (ev.rsvps||{})[a.uid]==='yes';
 const bYes = (ev.rsvps||{})[b.uid]==='yes';
 if (aYes && !bYes) return -1;
 if (!aYes && bYes) return 1;
-return a.name.localeCompare(b.name);
+return (a.name||"").localeCompare(b.name||"");
 }).map(m=>{
 const sides=Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
 const match=sides.includes('Both')||sides.some(s=>key.includes(s.toLowerCase()));
@@ -1723,7 +1723,7 @@ const lineups = lSnap.val()||{};
 const now = today();
 const pending = Object.values(evSnap.val()||{})
 .filter(e => e.date >= now && !(e.rsvps||{})[uid] && canSeeEvent(e))
-.sort((a,b) => a.date.localeCompare(b.date));
+.sort((a,b) => (a.date||"").localeCompare(b.date||""));
 if (!pending.length) {
 C.innerHTML = `<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">All caught up!</div><div class="empty-sub">You've replied to every upcoming event.</div></div></div>`;
 return;
@@ -1774,7 +1774,7 @@ if(!can.edit())return;
 closeModal();
 const [evSnap,uSnap]=await Promise.all([db.ref('events/'+evId).get(),db.ref('users').get()]);
 const ev=evSnap.val(); if(!ev)return;
-const members=(()=>{const all=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));return ev.exclusive?all.filter(m=>!!(ev.invitees||{})[m.uid]):all;})();
+const members=(()=>{const all=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>(a.name||"").localeCompare(b.name||""));return ev.exclusive?all.filter(m=>!!(ev.invitees||{})[m.uid]):all;})();
 const overlay=document.createElement('div');overlay.className='overlay';
 overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
 overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
@@ -1924,7 +1924,7 @@ const lineups = lSnap.val() || {};
 const approvedUids = new Set(Object.entries(uSnap2.val()||{}).filter(([,u])=>u.approved&&!u.disabled).map(([k])=>k));
 const all = Object.values(snap.val()||{})
 .filter(e => e.type === typeFilter && canSeeEvent(e))
-.sort((a,b) => a.date.localeCompare(b.date));
+.sort((a,b) => (a.date||"").localeCompare(b.date||""));
 const now = today();
 const upcoming = all.filter(e => e.date >= now);
 const past = all.filter(e => e.date < now).reverse();
@@ -2008,7 +2008,7 @@ withTimeout(db.ref('availability/'+p.uid).get(), 10000, 'availability'),
 withTimeout(db.ref('users/'+p.uid+'/goals').get(), 10000, 'goals'),
 withTimeout(db.ref('fitnessTests/'+p.uid).get(), 10000, 'fitnessTests'),
 ]).then(([evSnap, lSnap, mediaSnap, notesSnap, threshSnap, avSnap, goalsSnap, fitnessSnap]) => {
-const allEvs = Object.values(evSnap.val()||{}).filter(e=>canSeeEvent(e)&&e.date).sort((a,b)=>a.date.localeCompare(b.date));
+const allEvs = Object.values(evSnap.val()||{}).filter(e=>canSeeEvent(e)&&e.date).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 const lineups = lSnap.val()||{};
 const mediaItems = Object.entries(mediaSnap.val()||{}).sort((a,b)=>b[1].addedAt-a[1].addedAt);
 const noteItems = Object.entries(notesSnap.val()||{}).sort((a,b)=>b[1].ts-a[1].ts);
@@ -2379,7 +2379,7 @@ const b=document.createElement('button'); b.className='btn btn-primary'; b.inner
 const ib=document.createElement('button'); ib.className='btn'; ib.innerHTML='🔗 Invite link'; ib.onclick=showInviteModal; A.appendChild(ib);
 }
 trackListener(db.ref('users'), 'value', snap => {
-const allApproved = Object.values(snap.val()||{}).filter(u=>u.approved).sort((a,b)=>a.name.localeCompare(b.name));
+const allApproved = Object.values(snap.val()||{}).filter(u=>u.approved).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
 const members = allApproved.filter(u=>!u.disabled);
 const disabled = allApproved.filter(u=>u.disabled);
 if (!can.edit()) {
@@ -2762,7 +2762,7 @@ function pgLineup() {
 if (!can.view()) { navigate('dashboard'); return; }
 const C = document.getElementById('pg-content');
 trackListener(db.ref('events').orderByChild('date'), 'value', snap => {
-const evs = Object.values(snap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
+const evs = Object.values(snap.val()||{}).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 const upcoming = evs.filter(e=>e.date>=today());
 const all = [...upcoming, ...evs.filter(e=>e.date<today())];
 C.innerHTML = `<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap">
@@ -2900,7 +2900,7 @@ overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;
 <div class="modal-body" style="padding:12px 24px">
 <input type="text" id="seat-q" placeholder="Search member…" style="margin-bottom:12px" oninput="filterSeats(this.value)">
 <div id="seat-list">
-${avail.length ? avail.sort((a,b)=>a.name.localeCompare(b.name)).map(m=>{
+${avail.length ? avail.sort((a,b)=>(a.name||"").localeCompare(b.name||"")).map(m=>{
 const mSides = Array.isArray(m.sides)?m.sides:m.side?[m.side]:[];
 const sideMatch = mSides.includes('Both')||mSides.some(s=>key.includes(s.toLowerCase()));
 return `<div class="rsvp-row" style="cursor:pointer" onclick="assignSeat('${evId}','${key}','${m.uid}')">
@@ -2927,7 +2927,7 @@ if (can.edit()) {
 const b=document.createElement('button'); b.className='btn btn-primary'; b.innerHTML='＋ Add event'; b.onclick=()=>openEvtModal(null); A.appendChild(b);
 }
 trackListener(db.ref('events').orderByChild('date'), 'value', snap => {
-const evs = Object.values(snap.val()||{}).sort((a,b)=>a.date.localeCompare(b.date));
+const evs = Object.values(snap.val()||{}).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 db.ref('users').get().then(uSnap => {
 const mc = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).length;
 const upcoming = evs.filter(e=>e.date>=today());
@@ -2982,7 +2982,7 @@ const isNew = !ev;
 const overlay = document.createElement('div'); overlay.className='overlay';
 overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
 db.ref('users').get().then(uSnap => {
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
 const invitees = e.invitees||{};
 overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
 <div class="modal-header" style="flex-shrink:0"><div class="modal-title">${isNew?'Add event':'Edit event'}</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>
@@ -3135,7 +3135,7 @@ window.openRsvpModal = function(evId) {
 closeModal();
 Promise.all([db.ref('events/'+evId).get(), db.ref('users').get()]).then(([evSnap,uSnap]) => {
 const ev = evSnap.val();
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
 const rsvps = {...(ev.rsvps||{})};
 const ed = can.edit();
 const overlay = document.createElement('div'); overlay.className='overlay';
@@ -3234,10 +3234,10 @@ if (!can.view()) return;
 const C = document.getElementById('stats-tab-body');
 Promise.all([db.ref('users').get(), db.ref('events').get(), db.ref('availability').get()]).then(([uSnap,evSnap,allAvSnap]) => {
 const allAvData = allAvSnap.val()||{};
-const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
+const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
 const allPractices = Object.values(evSnap.val()||{})
   .filter(e => e.type === 'Practice' && e.date < today())
-  .sort((a,b)=>a.date.localeCompare(b.date));
+  .sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 
 // Build list of all seasons that have practices
 const seasonStarts = [...new Set(allPractices.map(e=>seasonStartForDate(e.date)))].sort();
@@ -3423,7 +3423,7 @@ const emailjsOn = EMAILJS_PUBLIC_KEY && !EMAILJS_PUBLIC_KEY.startsWith('YOUR_');
 const twoDaysStr = (()=>{ const d=new Date(); d.setDate(d.getDate()+2); return d.toISOString().slice(0,10); })();
 Promise.all([db.ref('users').get(), db.ref('events').get(), db.ref('settings/teamName').get()]).then(([uSnap,evSnap,tnSnap]) => {
 const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
-const events = Object.values(evSnap.val()||{}).filter(e=>e.date>=today() && canSeeEvent(e)).sort((a,b)=>a.date.localeCompare(b.date));
+const events = Object.values(evSnap.val()||{}).filter(e=>e.date>=today() && canSeeEvent(e)).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 const teamName = tnSnap.val()||TEAM_NAME_DEFAULT;
 const autoTargets = events.filter(e=>e.type==='Practice'&&e.date===twoDaysStr);
 const emailStatus = emailjsOn
@@ -3490,7 +3490,7 @@ const C = document.getElementById('pg-content');
 trackListener(db.ref('users'), 'value', snap => {
 const all = Object.values(snap.val()||{});
 const pending = all.filter(u=>!u.approved);
-const approved = all.filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
+const approved = all.filter(u=>u.approved&&!u.disabled).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
 const roleLegend = `<div class="card" style="padding:16px 20px;margin-bottom:20px">
 <div style="font-size:13px;font-weight:700;margin-bottom:10px">App roles — only admins can assign these</div>
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;font-size:13px">
@@ -3812,7 +3812,7 @@ const liveUrl = lrSnap.val() || '';
 db.ref('events').get().then(evSnap=>{
 const races = Object.values(evSnap.val()||{})
 .filter(e => e.type === 'Race')
-.sort((a,b)=>a.date.localeCompare(b.date));
+.sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 if(!races.length){C.innerHTML=`<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">No races yet</div><div class="empty-sub">Add race events first, then manage heats and results here.</div></div></div>`;return;}
 const todayStr = today();
 const upcomingIdx = races.findIndex(r=>r.date>=todayStr);
@@ -4004,7 +4004,7 @@ db.ref('lineups/'+raceId).get(),
 const ev=evSnap.val(); if(!ev)return;
 const heats=Object.entries(heatSnap.val()||{}).sort((a,b)=>Number(a[1].order||0)-Number(b[1].order||0));
 const allMembers=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
-const members=allMembers.filter(u=>(ev.rsvps||{})[u.uid]==='yes').sort((a,b)=>a.name.localeCompare(b.name));
+const members=allMembers.filter(u=>(ev.rsvps||{})[u.uid]==='yes').sort((a,b)=>(a.name||"").localeCompare(b.name||""));
 const liveUrl=lrSnap.val()||'';
 const lineup=lineupSnap.val()||{};
 function memberName(uid) {
@@ -4178,7 +4178,7 @@ Promise.all([
   db.ref('coachSchedule').get(),
 ]).then(([avSnap,uSnap,csSnap])=>{
 const avail=avSnap.val()||{};
-const members=can.edit()?Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name)):[];
+const members=can.edit()?Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>(a.name||"").localeCompare(b.name||"")):[];
 const coachSchedule=csSnap.val()||{};
 C.innerHTML=`
 <div class="card" style="padding:20px;margin-bottom:16px;max-width:600px">
@@ -4492,7 +4492,7 @@ const pAtt=mPractices.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const rAtt=mRaces.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const total=eventsExcludingAway(events.filter(e=>!mJoined||e.date>=mJoined),lbAvData,m.uid).filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const pPct=mPractices.length?Math.round(pAtt/mPractices.length*100):0;
-const practicesSorted=[...practices].sort((a,b)=>b.date.localeCompare(a.date));
+const practicesSorted=[...practices].sort((a,b)=>(b.date||"").localeCompare(a.date||""));
 let streak=0;
 for(const ev of practicesSorted){if(isAwayOnDate(lbAvData,m.uid,ev.date))continue;if((ev.rsvps||{})[m.uid]==='yes')streak++;else break;}
 return {...m,pAtt,rAtt,total,pPct,streak,mPracticeCount:mPractices.length};
@@ -4562,10 +4562,10 @@ if(can.edit()){
 const b=document.createElement('button');b.className='btn';b.innerHTML='⬇ Export PDF';b.onclick=exportSeasonPDF;A.appendChild(b);
 }
 Promise.all([db.ref('users').get(),db.ref('events').get()]).then(([uSnap,evSnap])=>{
-const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
+const members=Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
 const activeSeason = window._selectedSeason || currentSeasonStart();
 const seasonEnd = activeSeason.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
-const events=Object.values(evSnap.val()||{}).filter(e=>e.date<today()&&e.date>=activeSeason&&e.date<=seasonEnd).sort((a,b)=>a.date.localeCompare(b.date));
+const events=Object.values(evSnap.val()||{}).filter(e=>e.date<today()&&e.date>=activeSeason&&e.date<=seasonEnd).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 const practices=events.filter(e=>e.type==='Practice');
 const races=events.filter(e=>e.type==='Race');
 const socials=events.filter(e=>e.type==='Otter S.O.C.I.A.L');
@@ -4584,7 +4584,7 @@ const pA=mPracs.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const rA=mRaces.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const sA=mSocials.filter(e=>(e.rsvps||{})[m.uid]==='yes').length;
 const pPct=mPracs.length?Math.round(pA/mPracs.length*100):null;
-const practicesSorted=[...practices].sort((a,b)=>b.date.localeCompare(a.date));
+const practicesSorted=[...practices].sort((a,b)=>(b.date||"").localeCompare(a.date||""));
 let streak=0;for(const ev of practicesSorted){if((ev.rsvps||{})[m.uid]==='yes')streak++;else break;}
 const trend=pPct!==null?(pPct>=80?'↑':pPct>=50?'→':'↓'):'—';
 return `<div class="card" style="padding:16px">
@@ -4992,7 +4992,7 @@ openConversation(toUid);
 function openNewMessageModal() {
 closeModal();
 db.ref('users').get().then(snap=>{
-const members = Object.values(snap.val()||{}).filter(u=>u.approved&&u.uid!==currentUser.uid).sort((a,b)=>a.name.localeCompare(b.name));
+const members = Object.values(snap.val()||{}).filter(u=>u.approved&&u.uid!==currentUser.uid).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
 const overlay=document.createElement('div'); overlay.className='overlay';
 overlay.addEventListener('click',e=>{if(e.target===overlay)closeModal();});
 overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;max-height:90vh">
@@ -5314,7 +5314,7 @@ const C = document.getElementById('pg-content'); if(!C) return;
 db.ref('users').get().then(uSnap=>{
 db.ref('events').get().then(evSnap=>{
 const members = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled);
-const practices = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today()).sort((a,b)=>a.date.localeCompare(b.date));
+const practices = Object.values(evSnap.val()||{}).filter(e=>e.type==='Practice'&&e.date<today()).sort((a,b)=>(a.date||"").localeCompare(b.date||""));
 const trendHtml = renderRsvpTrends(practices, members);
 if (trendHtml) {
 const area = document.getElementById('season-export-area'); if(!area) return;
@@ -5975,7 +5975,7 @@ window.archiveSeason = async function(seasonStart) {
 
   const seasonEnd = seasonStart.replace(/^(\d+)/, y => String(parseInt(y)+1)).replace('10-01','09-30');
   const [uSnap, evSnap] = await Promise.all([db.ref('users').get(), db.ref('events').get()]);
-  const members  = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>a.name.localeCompare(b.name));
+  const members  = Object.values(uSnap.val()||{}).filter(u=>u.approved&&!u.disabled).sort((a,b)=>(a.name||"").localeCompare(b.name||""));
   const events   = Object.values(evSnap.val()||{}).filter(e=>e.date>=seasonStart&&e.date<=seasonEnd&&e.date<today());
   const practices = events.filter(e=>e.type==='Practice');
   const races     = events.filter(e=>e.type==='Race');
@@ -6010,7 +6010,7 @@ window.pgArchivedSeasons = async function() {
   C.innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading archives…</div>';
 
   const snap = await db.ref('archivedSeasons').get();
-  const archives = Object.values(snap.val()||{}).sort((a,b)=>b.seasonStart.localeCompare(a.seasonStart));
+  const archives = Object.values(snap.val()||{}).sort((a,b)=>(b.seasonStart||"").localeCompare(a.seasonStart||""));
 
   if (!archives.length) {
     C.innerHTML = `<div class="card" style="padding:0"><div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No archived seasons yet</div><div class="empty-sub">Go to Stats & Records and click "Archive season" at the end of each season (Sept 30).</div></div></div>`;
@@ -6084,7 +6084,7 @@ window.openBreakModal = async function(breakKey) {
       ${Object.keys(allBreaks).length ? `
         <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
           <div style="font-size:12px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Existing breaks</div>
-          ${Object.entries(allBreaks).sort((a,b)=>a[1].startDate?.localeCompare(b[1].startDate)).map(([k,b])=>`
+          ${Object.entries(allBreaks).sort((a,b)=>(a[1].startDate||"").localeCompare(b[1].startDate||"")).map(([k,b])=>`
             <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
               <div>
                 <span style="font-weight:600;font-size:13px">${esc(b.label||'Break')}</span>
