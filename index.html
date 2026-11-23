@@ -1125,7 +1125,7 @@ ${ev.exclusive?'<span class="badge badge-exclusive">🔒 Invite only</span>':''}
 </div>
 <div class="ev-detail-tabs" style="margin:0 0 20px">
 <button class="ev-detail-tab ${defaultTab==='rsvp'?'active':''}" id="edt-rsvp" onclick="evPageTab('rsvp')">RSVP</button>
-<button class="ev-detail-tab ${defaultTab==='lineup'?'active':''}" id="edt-lineup" onclick="evPageTab('lineup')">Lineup</button>
+${(ev.type==='Otter S.O.C.I.A.L' && ev.template==='sport') ? '<button class="ev-detail-tab" id="edt-squads" onclick="evPageTab(\'squads\')">Squads</button>' : (ev.type!=='Otter S.O.C.I.A.L' || (!ev.template || ev.template==='default')) ? '<button class="ev-detail-tab ' + (defaultTab==='lineup'?'active':'') + '" id="edt-lineup" onclick="evPageTab(\'lineup\')">Lineup</button>' : ''}
 ${ev.type==='Race'?'<button class="ev-detail-tab" id="edt-results" onclick="evPageTab(\'results\')">Results</button>':''}
 </div>
 <div id="ev-detail-body"></div>`;
@@ -1139,12 +1139,13 @@ navigate(prev||'dashboard');
 };
 window.evPageTab = function(tab) {
 const d = window._evPage; if (!d) return;
-['rsvp','lineup','results'].forEach(t => {
+['rsvp','lineup','results','squads'].forEach(t => {
 const el = document.getElementById('edt-'+t); if(el) el.classList.toggle('active', t===tab);
 });
 if (tab==='rsvp') renderEvDetailRsvp(d.evId, d.ev, d.members, d.lineup, d.uid);
 if (tab==='lineup') renderEvDetailLineup(d.evId, d.ev, d.members, d.lineup);
 if (tab==='results') renderEvDetailResults(d.evId, d.ev);
+if (tab==='squads') renderEvDetailSquads(d.evId, d.ev, d.members);
 };
 function renderEvDetailResults(evId, ev) {
 const body = document.getElementById('ev-detail-body');
@@ -2979,6 +2980,7 @@ if (!can.edit()) return; closeModal();
 const ev = evJson ? JSON.parse(typeof evJson==='string'?evJson:JSON.stringify(evJson)) : null;
 const e = ev || { id:genUid('e'), name:'', type:defaultType||'Practice', date:'', time:'', location:'', rsvps:{}, recurring:'none', recurUntil:'', exclusive:false, invitees:{} };
 const isNew = !ev;
+const isSocial = e.type === 'Otter S.O.C.I.A.L';
 const overlay = document.createElement('div'); overlay.className='overlay';
 overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
 db.ref('users').get().then(uSnap => {
@@ -2998,6 +3000,15 @@ overlay.innerHTML=`<div class="modal" style="display:flex;flex-direction:column;
 <div class="form-group"><label class="form-label">Date *</label><input id="ef-date" type="date" value="${esc(e.date)}"></div>
 <div class="form-group"><label class="form-label">Time</label><input id="ef-time" type="time" value="${esc(e.time)}"></div>
 <div class="form-group"><label class="form-label">Location</label><input id="ef-loc" value="${esc(e.location)}" placeholder="Rocky Point Pier"></div>
+<div id="ef-template-section" style="${isSocial?'':'display:none'}">
+<div class="form-group"><label class="form-label">Event template</label>
+<select id="ef-template" onchange="updateTemplateHint(this.value)">
+<option value="party" ${(e.template||'party')==='party'?'selected':''}>🎉 Party / Gathering</option>
+<option value="sport" ${e.template==='sport'?'selected':''}>🏅 Sporting / Activity event</option>
+</select>
+<div id="ef-template-hint" style="font-size:12px;color:var(--text-3);margin-top:5px"></div>
+</div>
+</div>
 <div id="recurring-section" style="${e.type==='Practice'?'':'display:none'}">
 <div style="border-top:1px solid var(--border);padding-top:14px;margin-top:2px">
 <div class="form-group"><label class="form-label">Repeats</label>
@@ -3057,6 +3068,14 @@ setTimeout(() => overlay.querySelector('#ef-name')?.focus(), 300);
 }
 window.toggleRecurring = v => {
 document.getElementById('recurring-section').style.display = v==='Practice' ? '' : 'none';
+const ts = document.getElementById('ef-template-section');
+if (ts) ts.style.display = v==='Otter S.O.C.I.A.L' ? '' : 'none';
+};
+window.updateTemplateHint = function(val) {
+const hint = document.getElementById('ef-template-hint');
+if (!hint) return;
+if (val === 'party') hint.textContent = 'Shows RSVP, guests, what to bring, and carpool — no lineup.';
+else if (val === 'sport') hint.textContent = 'Shows RSVP and squads — group attendees into named teams.';
 };
 window.toggleRecurUntil = v => {
 document.getElementById('recur-until-row').style.display = v==='none' ? 'none' : '';
@@ -3101,7 +3120,9 @@ if (!name||!date) { alert('Name and date are required.'); return; }
 if (exclusive && Object.keys(invitees).length <= 1) { alert('Please select at least one invitee (besides yourself).'); return; }
 if (recurring!=='none' && !recurUntil) { alert('Please set a "Repeat until" date.'); return; }
 if (recurUntil && recurUntil <= date) { alert('"Repeat until" must be after the start date.'); return; }
-const base = { name, date, type, time, location, recurring, recurUntil, exclusive, invitees };
+const templateEl = document.getElementById('ef-template');
+const template = templateEl ? templateEl.value : (type === 'Otter S.O.C.I.A.L' ? 'party' : '');
+const base = { name, date, type, time, location, recurring, recurUntil, exclusive, invitees, template };
 if (isNew && recurring !== 'none') {
 const dates = [];
 let cur = new Date(date+'T12:00:00');
@@ -5163,6 +5184,144 @@ showToast(`Created ${dates.length} events ✓`,'📆');
 logChange(`Created ${dates.length} bulk events (${name})`);
 navigate('practices');
 };
+
+// ── Squad template renderer ──
+window.renderEvDetailSquads = async function(evId, ev, members) {
+const body = document.getElementById('ev-detail-body');
+if (!body) return;
+body.innerHTML = '<div class="loading-full"><div class="spinner"></div>Loading squads…</div>';
+const snap = await db.ref('squads/'+evId).get();
+const squadsData = snap.val() || {};
+const attendingUids = new Set(Object.entries(ev.rsvps||{}).filter(([,v])=>v==='yes').map(([k])=>k));
+const attending = members.filter(m => attendingUids.has(m.uid));
+// Build assigned uid set
+const assignedUids = new Set();
+Object.values(squadsData).forEach(sq => { Object.keys(sq.members||{}).forEach(uid => assignedUids.add(uid)); });
+const unassigned = attending.filter(m => !assignedUids.has(m.uid));
+const isEdit = can.edit();
+body.innerHTML = '';
+
+// Header + Add squad button
+const hdr = document.createElement('div');
+hdr.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:16px';
+hdr.innerHTML = '<div style="font-size:13px;color:var(--text-3)">' + attending.length + ' attending · ' + unassigned.length + ' unassigned</div>'
+  + (isEdit ? '<button class="btn btn-sm" onclick="addSquad(&quot;'+evId+'&quot;)">＋ Add squad</button>' : '');
+body.appendChild(hdr);
+
+// Render each squad
+const squadList = document.createElement('div');
+squadList.id = 'squad-list';
+squadList.style.cssText = 'display:flex;flex-direction:column;gap:14px;margin-bottom:20px';
+function renderSquadCard(sqId, sq) {
+  const card = document.createElement('div');
+  card.className = 'card'; card.dataset.sqid = sqId;
+  card.style.cssText = 'padding:14px 16px';
+  const sqMembers = Object.keys(sq.members||{}).map(uid => members.find(m=>m.uid===uid)).filter(Boolean);
+  card.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">'
+    + '<div style="width:12px;height:12px;border-radius:50%;background:'+(sq.color||'var(--accent)')+';flex-shrink:0"></div>'
+    + '<div style="font-weight:700;font-size:15px;flex:1">' + esc(sq.name) + '</div>'
+    + '<span style="font-size:12px;color:var(--text-3)">' + sqMembers.length + ' member' + (sqMembers.length!==1?'s':'') + '</span>'
+    + (isEdit ? '<button class="btn btn-sm btn-ghost" style="color:var(--danger-text);margin-left:8px" onclick="deleteSquad(&quot;'+evId+'&quot;,&quot;'+sqId+'&quot;)">✕</button>' : '')
+    + '</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:6px" id="sq-members-'+sqId+'">'
+    + sqMembers.map(m => '<div style="display:flex;align-items:center;gap:5px;background:var(--surface-alt);padding:4px 8px;border-radius:20px;font-size:12px">'
+        + '<div class="avatar" style="width:20px;height:20px;font-size:8px">' + initials(m.name) + '</div>'
+        + esc(m.name)
+        + (isEdit ? '<button onclick="removeFromSquad(&quot;'+evId+'&quot;,&quot;'+sqId+'&quot;,&quot;'+m.uid+'&quot;)" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:11px;padding:0 2px;line-height:1">✕</button>' : '')
+        + '</div>').join('')
+    + (isEdit && unassigned.length > 0 ? '<button class="btn btn-sm btn-ghost" style="font-size:11px;padding:3px 8px" onclick="showAddToSquad(&quot;'+evId+'&quot;,&quot;'+sqId+'&quot;)">＋ Add</button>' : '')
+    + '</div>';
+  return card;
+}
+Object.entries(squadsData).sort((a,b)=>(a[1].order||0)-(b[1].order||0)).forEach(([sqId,sq]) => {
+  squadList.appendChild(renderSquadCard(sqId, sq));
+});
+body.appendChild(squadList);
+
+// Unassigned section
+if (attending.length > 0) {
+  const unassignedDiv = document.createElement('div');
+  unassignedDiv.className = 'card'; unassignedDiv.id = 'squad-unassigned';
+  unassignedDiv.style.cssText = 'padding:14px 16px';
+  unassignedDiv.innerHTML = '<div style="font-weight:700;font-size:13px;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Unassigned (' + unassigned.length + ')</div>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:6px">'
+    + (unassigned.length ? unassigned.map(m => '<div style="background:var(--surface-alt);padding:4px 10px;border-radius:20px;font-size:12px;display:flex;align-items:center;gap:5px">'
+        + '<div class="avatar" style="width:20px;height:20px;font-size:8px">' + initials(m.name) + '</div>'
+        + esc(m.name) + '</div>').join('') : '<span style="color:var(--text-3);font-size:13px">Everyone is assigned!</span>')
+    + '</div>';
+  body.appendChild(unassignedDiv);
+}
+};
+
+window.addSquad = async function(evId) {
+const name = prompt('Squad name (e.g. "Red Team", "Squad A"):');
+if (!name || !name.trim()) return;
+const colors = ['#ef4444','#3b82f6','#22c55e','#f59e0b','#8b5cf6','#ec4899','#06b6d4','#f97316'];
+const snap = await db.ref('squads/'+evId).get();
+const existing = Object.keys(snap.val()||{}).length;
+const color = colors[existing % colors.length];
+const key = db.ref('squads/'+evId).push().key;
+await db.ref('squads/'+evId+'/'+key).set({ name: name.trim(), color, members:{}, order: existing });
+const d = window._evPage;
+renderEvDetailSquads(evId, d.ev, d.members);
+};
+
+window.deleteSquad = async function(evId, sqId) {
+if (!confirm('Delete this squad?')) return;
+await db.ref('squads/'+evId+'/'+sqId).remove();
+const d = window._evPage;
+renderEvDetailSquads(evId, d.ev, d.members);
+};
+
+window.showAddToSquad = function(evId, sqId) {
+const d = window._evPage; if (!d) return;
+// Get current unassigned
+db.ref('squads/'+evId).get().then(snap => {
+  const squadsData = snap.val()||{};
+  const attendingUids = new Set(Object.entries(d.ev.rsvps||{}).filter(([,v])=>v==='yes').map(([k])=>k));
+  const attending = d.members.filter(m => attendingUids.has(m.uid));
+  const assignedUids = new Set();
+  Object.values(squadsData).forEach(sq => { Object.keys(sq.members||{}).forEach(uid => assignedUids.add(uid)); });
+  const unassigned = attending.filter(m => !assignedUids.has(m.uid));
+  if (!unassigned.length) { showToast('Everyone is already assigned to a squad','ℹ️'); return; }
+  closeModal();
+  const overlay = document.createElement('div'); overlay.className='overlay';
+  overlay.addEventListener('click',x=>{if(x.target===overlay)closeModal();});
+  const sqName = squadsData[sqId]?.name || 'Squad';
+  overlay.innerHTML='<div class="modal"><div class="modal-header"><div class="modal-title">Add to ' + esc(sqName) + '</div><button class="btn btn-sm btn-ghost" onclick="closeModal()">✕</button></div>'
+    + '<div class="modal-body" style="max-height:60vh;overflow-y:auto">'
+    + unassigned.map(m => '<label style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer">'
+        + '<input type="checkbox" data-uid="' + m.uid + '" class="sq-add-cb" style="width:18px;height:18px;accent-color:var(--accent)">'
+        + '<div class="avatar" style="width:28px;height:28px;font-size:10px">' + initials(m.name) + '</div>'
+        + '<div style="font-size:14px;font-weight:600">' + esc(m.name) + '</div>'
+        + '</label>').join('')
+    + '</div>'
+    + '<div class="modal-footer"><button class="btn" onclick="closeModal()">Cancel</button>'
+    + '<button class="btn btn-primary" onclick="confirmAddToSquad(&quot;'+evId+'&quot;,&quot;'+sqId+'&quot;)">Add selected</button></div></div>';
+  document.body.appendChild(overlay); modalEl=overlay;
+});
+};
+
+window.confirmAddToSquad = async function(evId, sqId) {
+const updates = {};
+document.querySelectorAll('.sq-add-cb:checked').forEach(cb => {
+  updates['squads/'+evId+'/'+sqId+'/members/'+cb.dataset.uid] = true;
+});
+if (!Object.keys(updates).length) { closeModal(); return; }
+await db.ref().update(updates);
+closeModal();
+const d = window._evPage;
+const evSnap = await db.ref('events/'+evId).get();
+d.ev = evSnap.val();
+renderEvDetailSquads(evId, d.ev, d.members);
+};
+
+window.removeFromSquad = async function(evId, sqId, uid) {
+await db.ref('squads/'+evId+'/'+sqId+'/members/'+uid).remove();
+const d = window._evPage;
+renderEvDetailSquads(evId, d.ev, d.members);
+};
+
 const _origRenderLineup = renderEvDetailLineup;
 renderEvDetailLineup = function(evId, ev, members, lineup) {
 _origRenderLineup(evId, ev, members, lineup);
@@ -5382,6 +5541,7 @@ const SECURE_FIREBASE_RULES = `{
 "bringing": { ".read": "auth != null", ".write": "auth != null" },
 "settings": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" },
 "changelog": { ".read": "auth != null", ".write": "auth != null" },
+"squads": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
 "raceHeats": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin' || root.child('users').child(auth.uid).child('role').val() === 'coach'" },
 "archivedSeasons": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" },
 "breaks": { ".read": "auth != null", ".write": "root.child('users').child(auth.uid).child('role').val() === 'admin'" },
