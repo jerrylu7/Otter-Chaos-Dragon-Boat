@@ -1447,7 +1447,7 @@ window.evdRsvp = async function(evId, val) {
 const uid = currentUser.uid;
 const evSnapChk = await db.ref('events/'+evId).get();
 if (isRsvpLocked(evSnapChk.val()||{})) {
-  showToast('RSVPs are closed 48 h before practice','🔒');
+  showToast('RSVPs are closed 24 h before practice','🔒');
   return;
 }
 await db.ref('events/'+evId+'/rsvps/'+uid).set(val);
@@ -1476,7 +1476,7 @@ const badge = document.getElementById('dash-badge');
 if(badge){ badge.textContent=pending; badge.style.display=pending?'inline-flex':'none'; }
 };
 window.showRsvpLockedInfo = function() {
-showToast('RSVPs are closed within 48 h of practice. Please contact your coach directly to change your RSVP.','🔒', 6000);
+showToast('RSVPs are closed within 24 hours of practice. Please contact your coach directly if you need to change your RSVP.','🔒', 6000);
 };
 window.adminSetRsvp = async function(evId, memberUid, val) {
 if (!can.edit()) return;
@@ -1762,12 +1762,12 @@ return '<div class="event-rsvp-card rsvp-pending clickable" id="ecard-'+ev.id+'"
 });
 }
 function isRsvpLocked(ev) {
-// Practices lock 48 hours before the event date; coaches/admins are exempt
+// Practices lock 24 hours before the event date; coaches/admins are exempt
 if (can.edit()) return false;
 if (!ev || ev.type !== 'Practice') return false;
 if (!ev.date) return false;
 const eventMs = new Date((ev.date + (ev.time ? 'T' + ev.time : 'T23:59')).replace(' ','T')).getTime();
-return Date.now() > eventMs - 48 * 3600000;
+return Date.now() > eventMs - 24 * 3600000;
 }
 window.openBulkRsvp = async function(evId) {
 if(!can.edit())return;
@@ -1846,7 +1846,7 @@ window.dashRsvp = async function(evId, val, btn) {
 const uid = currentUser.uid;
 const evSnapChk2 = await db.ref('events/'+evId).get();
 if (isRsvpLocked(evSnapChk2.val()||{})) {
-  showToast('RSVPs are closed 48 h before practice','🔒');
+  showToast('RSVPs are closed 24 h before practice','🔒');
   return;
 }
 const card = btn.closest('.event-rsvp-card');
