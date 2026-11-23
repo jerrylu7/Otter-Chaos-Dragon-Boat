@@ -1422,20 +1422,21 @@ ${seatEl('steers1','Steers 1')}
 ${seatEl('steers2','Steers 2')}
 </div>
 </div>
-${(()=>{ const dow = ev.date ? new Date(ev.date+'T12:00:00').getDay() : -1; if (dow !== 0) return ''; return `<hr style="margin:10px 0">
-<div style="text-align:center;margin-top:6px">
-<div class="boat-section-title" style="font-size:13px;margin-bottom:6px;text-align:center">🚤 Coach Boat</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-width:360px;margin:0 auto">
-<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px">Front</div>
-<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px">Front</div>
-${seatEl('cb_frontLeft','Front Left')}
-${seatEl('cb_frontRight','Front Right')}
-<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px;margin-top:4px">Back</div>
-<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px;margin-top:4px">Back</div>
-${seatEl('cb_backLeft','Back Left')}
-${seatEl('cb_backRight','Back Right')}
-</div>
-</div>`; })()}
+${(()=>{ const dow = ev.date ? new Date(ev.date+'T12:00:00').getDay() : -1; if (dow !== 0) return '';
+return '<hr style="margin:10px 0">'
+  + '<div style="text-align:center;margin-top:6px">'
+  + '<div class="boat-section-title" style="font-size:13px;margin-bottom:6px;text-align:center">\uD83D\uDEA4 Coach Boat</div>'
+  + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;max-width:360px;margin:0 auto">'
+  + '<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px">Front</div>'
+  + '<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px">Front</div>'
+  + seatEl('cb_frontLeft','Front Left')
+  + seatEl('cb_frontRight','Front Right')
+  + '<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px;margin-top:4px">Back</div>'
+  + '<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;text-align:center;padding-bottom:2px;margin-top:4px">Back</div>'
+  + seatEl('cb_backLeft','Back Left')
+  + seatEl('cb_backRight','Back Right')
+  + '</div></div>';
+})()}
 </div>`;
 if (ed) setTimeout(() => initLineupDrag(evId, body), 0);
 }
@@ -2851,18 +2852,20 @@ ${specialSlot('caller2', members.find(m=>m.uid===lineup.caller2), 'Caller 2')}
 ${specialSlot('steers1', members.find(m=>m.uid===lineup.steers1), 'Steers 1')}
 ${specialSlot('steers2', members.find(m=>m.uid===lineup.steers2), 'Steers 2')}
 </div>
-${(()=>{ const dow = evDate ? new Date(evDate+'T12:00:00').getDay() : -1; if (dow !== 0) return ''; return `<hr style="margin:14px 0">
-<div class="boat-section-title" style="text-align:center">🚤 Coach Boat</div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:380px;margin:0 auto">
-<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;text-align:center;letter-spacing:.05em;padding-bottom:2px">Front Left</div>
-<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;text-align:center;letter-spacing:.05em;padding-bottom:2px">Front Right</div>
-${specialSlot('cb_frontLeft', members.find(m=>m.uid===lineup.cb_frontLeft), 'Front Left')}
-${specialSlot('cb_frontRight', members.find(m=>m.uid===lineup.cb_frontRight), 'Front Right')}
-<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;text-align:center;letter-spacing:.05em;padding:8px 0 2px">Back Left</div>
-<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;text-align:center;letter-spacing:.05em;padding:8px 0 2px">Back Right</div>
-${specialSlot('cb_backLeft', members.find(m=>m.uid===lineup.cb_backLeft), 'Back Left')}
-${specialSlot('cb_backRight', members.find(m=>m.uid===lineup.cb_backRight), 'Back Right')}
-</div>`; })()}
+${(()=>{ const dow = evDate ? new Date(evDate+'T12:00:00').getDay() : -1; if (dow !== 0) return '';
+return '<hr style="margin:14px 0">'
+  + '<div class="boat-section-title" style="text-align:center">\uD83D\uDEA4 Coach Boat</div>'
+  + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:380px;margin:0 auto">'
+  + '<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;text-align:center;letter-spacing:.05em;padding-bottom:2px">Front Left</div>'
+  + '<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;text-align:center;letter-spacing:.05em;padding-bottom:2px">Front Right</div>'
+  + specialSlot('cb_frontLeft', members.find(m=>m.uid===lineup.cb_frontLeft), 'Front Left')
+  + specialSlot('cb_frontRight', members.find(m=>m.uid===lineup.cb_frontRight), 'Front Right')
+  + '<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;text-align:center;letter-spacing:.05em;padding:8px 0 2px">Back Left</div>'
+  + '<div style="font-size:10px;font-weight:700;color:var(--text-3);text-transform:uppercase;text-align:center;letter-spacing:.05em;padding:8px 0 2px">Back Right</div>'
+  + specialSlot('cb_backLeft', members.find(m=>m.uid===lineup.cb_backLeft), 'Back Left')
+  + specialSlot('cb_backRight', members.find(m=>m.uid===lineup.cb_backRight), 'Back Right')
+  + '</div>';
+})()}
 </div>
 ${ed ? `<div class="card" style="padding:16px 20px">
 <div style="font-size:14px;font-weight:700;margin-bottom:10px">Unassigned (${unassigned.length})</div>
