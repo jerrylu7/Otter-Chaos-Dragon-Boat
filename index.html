@@ -1738,22 +1738,25 @@ const k = Object.entries(lup).find(([,v])=>v===uid)?.[0];
 return k ? k.replace(/_/g,' ') : null;
 })();
 const evLocked = isRsvpLocked(ev);
-return `<div class="event-rsvp-card rsvp-pending clickable" id="ecard-${ev.id}" onclick="openEventDetail('${ev.id}',event)">
-<div class="event-rsvp-icon" style="background:${evBg(ev.type)}">${evIcon(ev.type)}</div>
-<div class="event-rsvp-info">
-<div class="event-rsvp-name">${esc(ev.name)} <span class="badge ${evBadgeClass(ev.type)}" style="font-size:10px">${ev.type}</span></div>
-<div class="event-rsvp-meta">
-<span>📅 ${fmtDate(ev.date)}</span>
-${ev.time?`<span>🕐 ${fmtTime(ev.time)}</span>`:''}
-${ev.location?`<span>📍 ${esc(ev.location)}</span>`:''}
-<span style="font-weight:700;color:${daysUntil<=1?'var(--danger)':daysUntil<=7?'var(--warning)':'var(--text-3)'}">${daysLabel}</span>
-</div>
-${seat?`<div class="dash-my-seat" style="margin-top:6px">🚣 Your seat: <strong>${esc(seat)}</strong></div>`:''}
-</div>
-${evLocked
-  ? '<div class="rsvp-action-btns" onclick="event.stopPropagation()"><span style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:4px">🔒 RSVPs closed</span></div>'
-  : '<div class="rsvp-action-btns" onclick="event.stopPropagation()"><button class="rsvp-action-btn" onclick="dashRsvp(''+ev.id+'','yes',this)">✓ Attending</button><button class="rsvp-action-btn" onclick="dashRsvp(''+ev.id+'','no',this)">✗ Not Attending</button></div>'}
-</div>`;
+const pendingSeatHtml = seat ? '<div class="dash-my-seat" style="margin-top:6px">\uD83D\uDEA3 Your seat: <strong>'+esc(seat)+'</strong></div>' : '';
+const pendingRsvpBtns = evLocked
+  ? '<div class="rsvp-action-btns" onclick="event.stopPropagation()"><span style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:4px">\uD83D\uDD12 RSVPs closed</span></div>'
+  : '<div class="rsvp-action-btns" onclick="event.stopPropagation()"><button class="rsvp-action-btn" onclick="dashRsvp(\'' + ev.id + '\',\'yes\',this)">\u2713 Attending</button><button class="rsvp-action-btn" onclick="dashRsvp(\'' + ev.id + '\',\'no\',this)">\u2717 Not Attending</button></div>';
+const pendingTimeHtml = ev.time ? '<span>\uD83D\uDD50 '+fmtTime(ev.time)+'</span>' : '';
+const pendingLocHtml = ev.location ? '<span>\uD83D\uDCCD '+esc(ev.location)+'</span>' : '';
+return '<div class="event-rsvp-card rsvp-pending clickable" id="ecard-'+ev.id+'" onclick="openEventDetail(\'' + ev.id + '\',event)">'
+  + '<div class="event-rsvp-icon" style="background:'+evBg(ev.type)+'">'+evIcon(ev.type)+'</div>'
+  + '<div class="event-rsvp-info">'
+  + '<div class="event-rsvp-name">'+esc(ev.name)+' <span class="badge '+evBadgeClass(ev.type)+'" style="font-size:10px">'+ev.type+'</span></div>'
+  + '<div class="event-rsvp-meta">'
+  + '<span>\uD83D\uDCC5 '+fmtDate(ev.date)+'</span>'
+  + pendingTimeHtml + pendingLocHtml
+  + '<span style="font-weight:700;color:'+(daysUntil<=1?'var(--danger)':daysUntil<=7?'var(--warning)':'var(--text-3)')+'">'+daysLabel+'</span>'
+  + '</div>'
+  + pendingSeatHtml
+  + '</div>'
+  + pendingRsvpBtns
+  + '</div>';
 }).join('');
 });
 }
@@ -1955,6 +1958,9 @@ const editBtns = can.edit() && !isPast
 <button class="btn btn-sm btn-danger btn-ghost" onclick="delEvent('${ev.id}')">Delete</button>
 ${ev.recurGroup?`<button class="btn btn-sm btn-ghost" style="color:var(--danger-text);font-size:11px" onclick="delSeries('${ev.recurGroup}')">Delete series</button>`:''}
 </div>` : '';
+const rcBtns = isPast ? '' : (isRsvpLocked(ev)
+  ? '<div class="rsvp-action-btns" onclick="event.stopPropagation()"><span style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:4px">\uD83D\uDD12 RSVPs closed</span></div>'
+  : '<div class="rsvp-action-btns" onclick="event.stopPropagation()"><button class="rsvp-action-btn '+(rsvp==='yes'?'selected-yes':'')+'" onclick="dashRsvp(\'' + ev.id + '\',\'yes\',this)">\u2713 Attending</button><button class="rsvp-action-btn '+(rsvp==='no'?'selected-no':'')+'" onclick="dashRsvp(\'' + ev.id + '\',\'no\',this)">\u2717 Not Attending</button></div>');
 return `<div class="event-rsvp-card ${borderClass} clickable" id="ecard-${ev.id}" onclick="openEventDetail('${ev.id}',event)">
 <div class="event-rsvp-icon" style="background:${evBg(ev.type)}">${evIcon(ev.type)}</div>
 <div class="event-rsvp-info">
@@ -1975,9 +1981,7 @@ ${statusPill} ${seatInfo}
 </div>
 ${editBtns}
 </div>
-${!isPast ? (isRsvpLocked(ev)
-  ? '<div class="rsvp-action-btns" onclick="event.stopPropagation()"><span style="font-size:12px;color:var(--text-3);display:flex;align-items:center;gap:4px">🔒 RSVPs closed</span></div>'
-  : '<div class="rsvp-action-btns" onclick="event.stopPropagation()"><button class="rsvp-action-btn '+(rsvp==='yes'?'selected-yes':'')+'" onclick="dashRsvp(''+ev.id+'','yes',this)">✓ Attending</button><button class="rsvp-action-btn '+(rsvp==='no'?'selected-no':'')+'" onclick="dashRsvp(''+ev.id+'','no',this)">✗ Not Attending</button></div>') : ''}
+${rcBtns}
 </div>`;
 }).join('');
 }
